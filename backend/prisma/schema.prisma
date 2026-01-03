@@ -24,6 +24,14 @@ model User {
   password  String?
   fullName  String
   role      Role     @default(RIDER)
+
+  //For riders only
+  isOnline   Boolean  @default(false)
+  lastLat    Float?
+  lastLng    Float?
+  rating     Float?   @default(0)
+  ridesCount Int      @default(0)
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
