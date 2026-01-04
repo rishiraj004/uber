@@ -25,7 +25,7 @@ model User {
   fullName  String
   role      Role     @default(RIDER)
 
-  //For riders only
+  //For captains only
   isOnline   Boolean  @default(false)
   lastLat    Float?
   lastLng    Float?
