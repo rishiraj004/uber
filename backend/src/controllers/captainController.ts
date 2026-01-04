@@ -27,3 +27,38 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
         res.status(500).json({ message: "Error toggling status" });
     }
 };
+
+export const updateLocation = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const captainId = req.user?.userId;
+        const { latitude, longitude } = req.body;
+
+        if(!captainId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if(latitude === undefined || longitude === undefined) {
+            return res.status(400).json({ message: "Latitude and Longitude are required." });
+        }
+
+        const updatedCaptain = await prisma.user.update({
+            where: {id:captainId},
+            data: {
+                lastLat: latitude,
+                lastLng: longitude
+            },
+            select: { id:true, lastLat:true, lastLng:true, fullName:true, isOnline:true }
+        });
+
+        res.status(200).json({
+            message: "Location updated successfully.",
+            location: {
+                latitude: updatedCaptain.lastLat,
+                longitude: updatedCaptain.lastLng
+            },
+            isOnline: updatedCaptain.isOnline
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error updating location" });
+    }
+};
