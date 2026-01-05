@@ -2,6 +2,8 @@ import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import crypto from "crypto";
+import { findNearbyCaptains } from "../services/mapService";
+import { sendNotification } from "../config/socket";
 
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {
@@ -24,6 +26,22 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
             }
         });
 
+        const nearbyCaptains = await findNearbyCaptains(pickupCoords.lat, pickupCoords.lng, 5);
+
+        nearbyCaptains.forEach(captain => {
+            sendNotification(
+                captain.id, 
+                "NEW_RIDE_REQUEST",
+                { 
+                    rideId: newRide.id,
+                    pickupAddress: newRide.pickupAddress,
+                    dropoffAddress: newRide.dropoffAddress,
+                    fare: newRide.fare,
+                    riderName: req.user?.name || "Rider"
+                }
+            );
+        });
+
         res.status(201).json({ 
             message: "Ride created successfully",
             ride: newRide 
@@ -33,3 +51,4 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+

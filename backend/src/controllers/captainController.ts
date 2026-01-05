@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import prisma from "../config/prisma";
+import { findNearbyCaptains } from "../services/mapService";
 
 export const toggleAvailability = async ( req : AuthRequest , res : Response ) => {
     try {
@@ -81,24 +82,7 @@ export const getNearbyCaptains = async ( req : AuthRequest , res : Response ) =>
         const riderLng = parseFloat(longitude as string);
         const searchRadius = parseFloat(radius as string);
 
-        const nearbyCaptains = await prisma.$queryRaw`
-            SELECT id, "fullName", "lastLat", "lastLng", rating,
-            (6371 * acos(
-                cos(radians(${riderLat})) * cos(radians("lastLat")) *
-                cos(radians("lastLng") - radians(${riderLng})) +
-                sin(radians(${riderLat})) * sin(radians("lastLat"))
-            )) AS distance
-            FROM "User"
-            WHERE role = 'CAPTAIN' 
-            AND "isOnline" = true
-            AND (6371 * acos(
-                cos(radians(${riderLat})) * cos(radians("lastLat")) *
-                cos(radians("lastLng") - radians(${riderLng})) +
-                sin(radians(${riderLat})) * sin(radians("lastLat"))
-            )) <= ${searchRadius}
-            ORDER BY distance ASC
-            LIMIT 10;
-        `;
+        const nearbyCaptains = await findNearbyCaptains(riderLat, riderLng, searchRadius);
 
         res.status(200).json({ captains: nearbyCaptains });
     } catch (error) {
