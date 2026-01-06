@@ -1,12 +1,18 @@
 import './App.css'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import SignupPage from './pages/signup'
+import LoginPage from './pages/login'
 
 function App() {
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-black text-white">
-      <h1 className="text-5xl font-bold underline">
-        Tailwind is Working!
-      </h1>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
