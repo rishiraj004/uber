@@ -26,6 +26,12 @@ enum RideStatus {
   CANCELLED
 }
 
+enum VehicleType {
+  BIKE
+  CAR
+  AUTO
+}
+
 model Ride {
   id             Int        @id @default(autoincrement())
 
@@ -44,6 +50,8 @@ model Ride {
   captainId     Int?
   
   status        RideStatus @default(PENDING)
+
+  vehicleType   VehicleType
   
   fare          Float?
 

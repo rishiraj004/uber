@@ -1,17 +1,13 @@
-import { Request, Response, NextFunction } from "express";
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "./authMiddelwares";
+import jwt from "jsonwebtoken";
 
-export interface AuthRequest extends Request {
-    user?: {
-        userId: number;
-        role: string;
-    };
-}
 
 export const authorizeRole = ( requiredRole : 'RIDER' | 'CAPTAIN') => {
     return ( req : AuthRequest , res : Response , next : NextFunction ) => {
-        const role = req.user?.role;
-        if (role !== requiredRole) {
-            return res.status(403).json({ message: "Forbidden: You do not have the required role." });
+        const userRole = req.user?.role;
+        if (userRole !== requiredRole) {
+            return res.status(403).json({ message: "Access denied. Insufficient permissions." });
         }
         next();
     }

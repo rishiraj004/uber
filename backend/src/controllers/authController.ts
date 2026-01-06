@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
+import { userData } from "../services/getProfileService";
 
 export const signup = async ( req : Request , res : Response ) => {
     try { 
@@ -86,19 +87,7 @@ export const getProfile = async ( req : AuthRequest , res : Response ) => {
     try {
         const userId = req.user?.userId;
 
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: {
-                id: true,
-                email: true,
-                fullName: true,
-                role: true,
-                isOnline: true,
-                rating: true,
-                ridesCount: true,
-                createdAt: true
-            }
-        });
+        const user = userData(userId!);
 
         if (!user) {
             return res.status(404).json({ message: "User not found." });

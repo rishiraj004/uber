@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes';
 import captainRoutes from './routes/captainRoutes';
+import rideRoutes from './routes/rideRoutes';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -20,6 +21,7 @@ app.use((err : any, req: express.Request, res: express.Response, next: express.N
 
 app.use('/api/auth', authRoutes);
 app.use('/api/captain', captainRoutes);
+app.use('/api/ride', rideRoutes);
 
 app.get('/', (req, res) => {
     res.send('Uber Backend is running');

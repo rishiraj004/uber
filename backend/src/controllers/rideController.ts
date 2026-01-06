@@ -2,15 +2,29 @@ import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import crypto from "crypto";
-import { findNearbyCaptains } from "../services/mapService";
+import { findNearbyCaptains, distanceBetweenPoints } from "../services/mapService";
 import { sendNotification } from "../config/socket";
+import { calculateRideFare, RideFare } from "../services/rideService";
 
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {
-        const { pickupCoords , destCoords , pickup , destination , fare } = req.body;
+        const { vehicleType , pickupCoords , destCoords , pickup , destination } = req.body;
+
+        if(!vehicleType || !pickupCoords || !destCoords || !pickup || !destination) {
+            return res.status(400).json({ message: "All ride details are required." });
+        }
+        
         const riderId = req.user?.userId;
 
         const otp = crypto.randomInt(1000, 9999).toString();
+        const distanceKm = distanceBetweenPoints(
+            pickupCoords.lat, 
+            pickupCoords.lng, 
+            destCoords.lat, 
+            destCoords.lng
+        );
+        const durationInMinutes = (distanceKm / 40) * 60; // Assuming average speed of 40 km/h....later will fetch from map api
+        const fare = calculateRideFare(distanceKm, durationInMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');
         const newRide = await prisma.ride.create({
             data: {
                 riderId: riderId!,
@@ -20,7 +34,8 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                 pickupLng: pickupCoords.lng,
                 dropoffLat: destCoords.lat,
                 dropoffLng: destCoords.lng,
-                fare: parseFloat(fare),
+                vehicleType: vehicleType,
+                fare: parseFloat(fare.toFixed(2)),
                 otp: otp,
                 status: "PENDING"
             }
@@ -52,3 +67,63 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
     }
 };
 
+export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
+    try {
+        const captainId = req.user?.userId;
+        const { rideId } = req.body;
+
+        if(!captainId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if(!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+        if(!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        if(ride.status !== "PENDING") {
+            return res.status(400).json({ message: "Ride is no longer available." });
+        }
+
+        const updatedRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: {
+                captainId: captainId,
+                status: "ACCEPTED"
+            },
+            include: {
+                captain: {
+                    select: {
+                        fullName: true,
+                        rating: true,
+                        lastLat: true,
+                        lastLng: true
+                    }
+                }
+            }
+        });
+
+        sendNotification(updatedRide.riderId , "RIDE_ACCEPTED", {
+            rideId: updatedRide.id,
+            captainName: updatedRide.captain?.fullName,
+            status: updatedRide.status,
+            captainRating: updatedRide.captain?.rating,
+            captainLocation: {
+                latitude: updatedRide.captain?.lastLat,
+                longitude: updatedRide.captain?.lastLng
+            }
+        });
+
+        res.status(200).json({ 
+            message: "Ride accepted successfully",
+            ride: updatedRide 
+        });
+    } catch (error) {
+        console.error("Error accepting ride:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
