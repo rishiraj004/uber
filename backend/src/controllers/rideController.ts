@@ -2,9 +2,10 @@ import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import crypto from "crypto";
-import { findNearbyCaptains, distanceBetweenPoints } from "../services/mapService";
+import { findNearbyCaptains } from "../services/mapService";
+import { distanceBetweenPoints } from "../utils";
 import { sendNotification } from "../config/socket";
-import { calculateRideFare, RideFare } from "../services/rideService";
+import { calculateRideFare } from "../services/rideService";
 
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {

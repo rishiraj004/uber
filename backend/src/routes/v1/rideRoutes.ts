@@ -1,7 +1,7 @@
-import { authorizeRole } from "../middlewares/roleMiddlewares";
-import { authenticate } from "../middlewares/authMiddelwares";
+import { authorizeRole } from "../../middlewares/roleMiddlewares";
+import { authenticate } from "../../middlewares/authMiddelwares";
 import { Router } from "express";
-import { createRide, acceptRide, startRide, completeRide } from "../controllers/rideController";
+import { createRide, acceptRide, startRide, completeRide } from "../../controllers/rideController";
 
 const router = Router();
 
