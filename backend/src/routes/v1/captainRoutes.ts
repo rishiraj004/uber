@@ -1,7 +1,6 @@
 import { Router } from "express";
-import { toggleAvailability, updateLocation, getNearbyCaptains } from "../controllers/captainController";
-import { authenticate } from "../middlewares/authMiddelwares";
-import { authorizeRole } from "../middlewares/roleMiddlewares";
+import { toggleAvailability, updateLocation, getNearbyCaptains } from "../../controllers/captainController";
+import { authenticate, authorizeRole } from "../../middlewares";
 
 const router = Router();
 
