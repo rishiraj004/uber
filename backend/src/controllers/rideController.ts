@@ -13,7 +13,7 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         if(!vehicleType || !pickupCoords || !destCoords || !pickup || !destination) {
             return res.status(400).json({ message: "All ride details are required." });
         }
-        
+
         const riderId = req.user?.userId;
 
         const otp = crypto.randomInt(1000, 9999).toString();
@@ -124,6 +124,122 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
         });
     } catch (error) {
         console.error("Error accepting ride:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const startRide = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const captainId = req.user?.userId;
+        const { rideId, otp } = req.body;
+        if(!captainId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if(!rideId || !otp) {
+            return res.status(400).json({ message: "Ride ID and OTP are required." });
+        }
+
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+
+        if(!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        if(ride.captainId !== captainId) {
+            return res.status(403).json({ message: "You are not assigned to this ride." });
+        }
+
+        if(ride.status !== "ACCEPTED") {
+            return res.status(400).json({ message: `Cannot start ride in ${ride.status} status.` });
+        }
+
+        if(ride.otp !== otp) {
+            return res.status(400).json({ message: "Invalid OTP." });
+        }
+
+        const [ongoingRide, updatedCaptain] = await prisma.$transaction([
+            prisma.ride.update({
+                where: { id: Number(rideId) },
+                data: { status: "ONGOING", otp: null, startedAt: new Date() },
+            }),
+            prisma.user.update({
+                where: { id: captainId },
+                data: { isOnline: false }
+            })
+        ]);
+
+        await prisma.user.update({
+            where: { id: captainId },
+            data: { isOnline: false }
+        });
+
+        sendNotification(ongoingRide.riderId , "RIDE_STARTED", {
+            rideId: ongoingRide.id,
+            status: ongoingRide.status
+        });
+
+        res.status(200).json({ 
+            message: "Ride started successfully",
+            ride: ongoingRide 
+        });
+    } catch (error) {
+        console.error("Error starting ride:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const completeRide = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const captainId = req.user?.userId;
+        const { rideId } = req.body;
+
+        if(!captainId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if(!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+
+        if(!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        if(ride.captainId !== captainId) {
+            return res.status(403).json({ message: "You are not assigned to this ride." });
+        }
+
+        if(ride.status !== "ONGOING") {
+            return res.status(400).json({ message: `Cannot complete ride in ${ride.status} status.` });
+        }
+
+        const [completedRide, updatedCaptain] = await prisma.$transaction([
+            prisma.ride.update({
+                where: { id: Number(rideId) },
+                data: { status: "COMPLETED", completedAt: new Date() },
+            }),
+            prisma.user.update({
+                where: { id: captainId },
+                data: { isOnline: false }
+            })
+        ]);
+
+        sendNotification(completedRide.riderId , "RIDE_COMPLETED", {
+            rideId: completedRide.id,
+            status: completedRide.status,
+            fare: completedRide.fare,
+            message: "Thank you for riding with us!"
+        });
+
+        res.status(200).json({ 
+            message: "Ride completed successfully",
+            ride: completedRide
+        });
+    } catch (error) {
+        console.error("Error completing ride:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };

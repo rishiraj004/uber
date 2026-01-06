@@ -56,6 +56,9 @@ model Ride {
   fare          Float?
 
   otp           String?
+
+  startedAt     DateTime?
+  completedAt   DateTime?
   
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
