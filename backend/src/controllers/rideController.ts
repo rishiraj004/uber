@@ -270,6 +270,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
 
 export const cancelRide = async ( req : AuthRequest , res : Response ) => {
     try {
+        console.log("Cancel Ride Request Body:", req.body);
         const userId = req.user?.userId;
         const { rideId } = req.body;
         if(!userId) {
@@ -310,7 +311,7 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
                 message: "The ride has been cancelled."
             });
         }
-        
+
         res.status(200).json({ 
             message: "Ride cancelled successfully",
             ride: cancelledRide 

@@ -13,6 +13,7 @@ const HomePage: React.FC = () => {
     const [fares, setFares] = useState<{ [key in "CAR" | "BIKE" | "AUTO"]: number }>({ CAR: 0, BIKE: 0, AUTO: 0 });
     const [error, setError] = useState("");
     const [rideStatus, setRideStatus] = useState<string | null>("Searching...");
+    const [rideId, setRideId] = useState<number | null>(null);
 
     const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
     const socket = io("http://localhost:3000", {
@@ -112,8 +113,9 @@ const HomePage: React.FC = () => {
                     Authorization: `Bearer ${token}`
                 }
             });
+            setRideId(response.data.ride.id);
             socket.emit("NEW_RIDE_REQUEST", {
-                rideId: response.data.rideId,
+                rideId: response.data.ride.id,
                 pickup,
                 destination: drop,
                 pickupCoords: dummyCoords.pickup,
@@ -128,6 +130,21 @@ const HomePage: React.FC = () => {
             }
         }
     };
+
+    const cancelRide = async () => {
+        setLoading(false);
+        setRideStatus(null);
+        console.log("Cancelling ride with ID:", rideId);
+        if (!rideId) {
+            setError("No ride to cancel.");
+            return;
+        }
+        await api.post("/ride/cancel-ride", {rideId}, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`
+            }
+        });
+    }
 
     return (
     <div className="h-screen w-screen flex flex-col md:flex-row relative overflow-hidden">
@@ -205,11 +222,7 @@ const HomePage: React.FC = () => {
             {/* 5. Cancel Ride Request button */}
             {loading && (
                 <button
-                  onClick={() => {
-                    setLoading(false);
-                    setRideStatus(null);
-                    socket.emit("CANCEL_RIDE_REQUEST", { userId });
-                  }}
+                  onClick={cancelRide}
                   className="w-full mt-6 bg-black text-white py-4 rounded-xl font-bold text-lg hover:bg-zinc-800 disabled:bg-gray-400 transition"
                 >
                   Cancel Ride Request

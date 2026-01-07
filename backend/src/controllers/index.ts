@@ -1,5 +1,5 @@
 import { signup, login, getProfile } from "./authController";
-import { createRide, acceptRide, startRide, completeRide } from "./rideController";
+import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide } from "./rideController";
 
 export {
     signup,
@@ -8,5 +8,7 @@ export {
     createRide,
     acceptRide,
     startRide,
-    completeRide
+    completeRide,
+    calculateFare,
+    cancelRide
 };

@@ -1,36 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import api from '../services/api';
 import { io, Socket } from 'socket.io-client';
 import { ShieldCheck, MapPin, Navigation, DollarSign, Power } from 'lucide-react';
 
 const CaptainDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [currentRideRequest, setCurrentRideRequest] = useState<any>(null);
-  const [socket, setSocket] = useState<Socket | null>(null);
+
+    const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
+    const socket = io("http://localhost:3000", {
+        query: {
+            userId: userId
+        }
+    });
 
   // 1. Initialize Socket.io Connection
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userId = JSON.parse(atob(token!.split('.')[1])).userId; // Extracting userId from JWT
-
-    const newSocket = io('http://localhost:3000', {
-      query: { userId }
-    });
-
-    newSocket.on('NEW_RIDE_REQUEST', (data) => {
+    socket.on('NEW_RIDE_REQUEST', (data) => {
       console.log("New Ride Request Received:", data);
       setCurrentRideRequest(data);
     });
 
-    setSocket(newSocket);
-    return () => { newSocket.close(); };
-}, []);
+    return () => { socket.close(); };
+  });
 
   // 2. Toggle Availability (PATCH /toggle-status)
   const handleStatusToggle = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.patch('http://localhost:3000/api/v1/captain/toggle-status', {}, {
+      const response = await api.patch('/captain/toggle-status', {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setIsOnline(response.data.isOnline);
@@ -43,12 +42,13 @@ const CaptainDashboard = () => {
   const acceptRide = async (rideId: number) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:3000/api/v1/ride/accept-ride', { rideId }, {
+      await api.post('ride/accept-ride', { rideId }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert("Ride Accepted! Navigate to pickup.");
       setCurrentRideRequest(null);
     } catch (error) {
+      console.error("Error accepting ride", error);
       alert("Could not accept ride.");
     }
   };
