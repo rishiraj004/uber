@@ -2,7 +2,7 @@ import axios from "axios";
 import api from "../services/api";
 import { useState, useMemo, useEffect } from "react";
 import { MapPin, Navigation, Car, Bike, Zap } from 'lucide-react';
-import { io, Socket } from "socket.io-client";
+import { io } from "socket.io-client";
 
 const HomePage: React.FC = () => {
     const [pickup, setPickup] = useState("");
@@ -12,7 +12,6 @@ const HomePage: React.FC = () => {
     const [showFares, setShowFares] = useState(false);
     const [fares, setFares] = useState<{ [key in "CAR" | "BIKE" | "AUTO"]: number }>({ CAR: 0, BIKE: 0, AUTO: 0 });
     const [error, setError] = useState("");
-    const [rideStatus, setRideStatus] = useState<string | null>("Searching...");
     const [rideId, setRideId] = useState<number | null>(null);
 
     const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
@@ -23,8 +22,7 @@ const HomePage: React.FC = () => {
     });
 
     useEffect(() => {
-      socket.on("RIDE_ACCEPTED", (data) => {
-        setRideStatus(`Ride Accepted by ${data.captainName}.`);
+      socket.on("RIDE_ACCEPTED", () => {
         setLoading(false);
         //navigate to ride tracking page (to be implemented)
       });
@@ -133,7 +131,6 @@ const HomePage: React.FC = () => {
 
     const cancelRide = async () => {
         setLoading(false);
-        setRideStatus(null);
         console.log("Cancelling ride with ID:", rideId);
         if (!rideId) {
             setError("No ride to cancel.");
@@ -183,6 +180,13 @@ const HomePage: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* Error Message Display */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+            {error}
+          </div>
+        )}
 
         {/* 2. Vehicle Selection (Shown after destination is entered) */}
         {showFares && (

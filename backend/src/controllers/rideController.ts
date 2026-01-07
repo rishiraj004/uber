@@ -293,24 +293,20 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
             where: { id: Number(rideId) },
             data: { status: "CANCELLED" },
         });
-        if(ride.captainId) {
-            sendNotification(ride.captainId , "RIDE_CANCELLED", {
-                rideId: cancelledRide.id,
-                status: cancelledRide.status,
-                message: "The ride has been cancelled."
-            });
-            sendNotification(ride.riderId , "RIDE_CANCELLED", {
-                rideId: cancelledRide.id,
-                status: cancelledRide.status,
-                message: "The ride has been cancelled."
-            });
-        } else {
-            sendNotification(ride.riderId , "RIDE_CANCELLED", {
-                rideId: cancelledRide.id,
-                status: cancelledRide.status,
-                message: "The ride has been cancelled."
-            });
+
+        const partyIds = [ride.riderId];
+        if (ride.captainId) partyIds.push(ride.captainId);
+        else {
+            partyIds.push(...(await findNearbyCaptains(ride.pickupLat, ride.pickupLng, 5)).map(captain => captain.id));
         }
+
+        partyIds.forEach(id => {
+            sendNotification(id, "RIDE_CANCELLED", {
+                rideId: cancelledRide.id,
+                status: cancelledRide.status,
+                message: "The ride has been cancelled."
+            });
+        });
 
         res.status(200).json({ 
             message: "Ride cancelled successfully",

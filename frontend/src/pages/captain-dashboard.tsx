@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
 import api from '../services/api';
-import { io, Socket } from 'socket.io-client';
-import { ShieldCheck, MapPin, Navigation, DollarSign, Power } from 'lucide-react';
+import { io } from 'socket.io-client';
+import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
+
+interface RideRequest {
+  rideId: number;
+  riderName: string;
+  fare: number;
+  pickupAddress: string;
+  dropoffAddress: string;
+}
 
 const CaptainDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
-  const [currentRideRequest, setCurrentRideRequest] = useState<any>(null);
+  const [currentRideRequest, setCurrentRideRequest] = useState<RideRequest | null>(null);
 
     const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
     const socket = io("http://localhost:3000", {
@@ -23,6 +30,25 @@ const CaptainDashboard = () => {
     });
 
     return () => { socket.close(); };
+  });
+
+  useEffect(() => {
+    socket.on("RIDE_ACCEPTED", (data) => {
+      console.log("Ride Accepted Notification:", data);
+      setCurrentRideRequest(null);
+    });
+
+    return () => { socket.off("RIDE_ACCEPTED"); };
+  });
+
+  useEffect(() => {
+    socket.on("RIDE_CANCELLED", (data) => {
+      console.log("Ride Cancelled Notification:", data);
+      setCurrentRideRequest(null);
+      console.log("Current ride has been cancelled by the rider.");
+    });
+
+    return () => { socket.off("RIDE_CANCELLED"); };
   });
 
   // 2. Toggle Availability (PATCH /toggle-status)
@@ -95,7 +121,7 @@ const CaptainDashboard = () => {
 
         {/* Incoming Ride Notification Popup */}
         {currentRideRequest && (
-          <div className="absolute bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-[450px] bg-white rounded-3xl shadow-2xl z-30 p-6 border-2 border-black animate-bounce-short">
+          <div className="absolute bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-112.5 bg-white rounded-3xl shadow-2xl z-30 p-6 border-2 border-black animate-bounce-short">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded">NEW REQUEST</span>
@@ -130,7 +156,7 @@ const CaptainDashboard = () => {
               </button>
               <button 
                 onClick={() => acceptRide(currentRideRequest.rideId)}
-                className="flex-[2] py-3 bg-black text-white rounded-xl font-bold hover:bg-zinc-800"
+                className="flex-2 py-3 bg-black text-white rounded-xl font-bold hover:bg-zinc-800"
               >
                 Accept Ride
               </button>
