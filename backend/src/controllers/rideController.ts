@@ -267,3 +267,56 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+export const cancelRide = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const userId = req.user?.userId;
+        const { rideId } = req.body;
+        if(!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if(!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+        if(!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+        if(ride.riderId !== userId && ride.captainId !== userId) {
+            return res.status(403).json({ message: "You are not associated with this ride." });
+        }
+        if(ride.status === "COMPLETED" || ride.status === "CANCELLED") {
+            return res.status(400).json({ message: `Cannot cancel ride in ${ride.status} status.` });
+        }
+        const cancelledRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: { status: "CANCELLED" },
+        });
+        if(ride.captainId) {
+            sendNotification(ride.captainId , "RIDE_CANCELLED", {
+                rideId: cancelledRide.id,
+                status: cancelledRide.status,
+                message: "The ride has been cancelled."
+            });
+            sendNotification(ride.riderId , "RIDE_CANCELLED", {
+                rideId: cancelledRide.id,
+                status: cancelledRide.status,
+                message: "The ride has been cancelled."
+            });
+        } else {
+            sendNotification(ride.riderId , "RIDE_CANCELLED", {
+                rideId: cancelledRide.id,
+                status: cancelledRide.status,
+                message: "The ride has been cancelled."
+            });
+        }
+        
+        res.status(200).json({ 
+            message: "Ride cancelled successfully",
+            ride: cancelledRide 
+        });
+    } catch (error) {
+        console.error("Error cancelling ride:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
