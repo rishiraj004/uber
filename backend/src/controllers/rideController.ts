@@ -7,6 +7,29 @@ import { distanceBetweenPoints } from "../utils";
 import { sendNotification } from "../config/socket";
 import { calculateRideFare } from "../services/rideService";
 
+export const calculateFare = async ( req: AuthRequest, res: Response) => {
+    try {
+        const { vehicleType , pickupCoords , destCoords } = req.body;
+        if(!vehicleType || !pickupCoords || !destCoords) {
+            return res.status(400).json({ message: "Vehicle type, pickup and destination coordinates are required." });
+        }
+        const distanceKm = distanceBetweenPoints(
+            pickupCoords.lat, 
+            pickupCoords.lng,
+            destCoords.lat,
+            destCoords.lng
+        );
+        const durationInMinutes = (distanceKm / 40) * 60; // Assuming average speed of 40 km/h....later will fetch from map api
+        const fare = calculateRideFare(distanceKm, durationInMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');  
+        res.status(200).json({ 
+            estimatedCost: parseFloat(fare.toFixed(2))
+        });
+    } catch (error) {
+        console.error("Error calculating fare:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }   
+};
+
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {
         const { vehicleType , pickupCoords , destCoords , pickup , destination } = req.body;
