@@ -1,7 +1,8 @@
 import axios from "axios";
 import api from "../services/api";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MapPin, Navigation, Car, Bike, Zap } from 'lucide-react';
+import { io, Socket } from "socket.io-client";
 
 const HomePage: React.FC = () => {
     const [pickup, setPickup] = useState("");
@@ -11,6 +12,26 @@ const HomePage: React.FC = () => {
     const [showFares, setShowFares] = useState(false);
     const [fares, setFares] = useState<{ [key in "CAR" | "BIKE" | "AUTO"]: number }>({ CAR: 0, BIKE: 0, AUTO: 0 });
     const [error, setError] = useState("");
+    const [rideStatus, setRideStatus] = useState<string | null>("Searching...");
+
+    const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
+    const socket = io("http://localhost:3000", {
+        query: {
+            userId: userId
+        }
+    });
+
+    useEffect(() => {
+      socket.on("RIDE_ACCEPTED", (data) => {
+        setRideStatus(`Ride Accepted by ${data.captainName}.`);
+        setLoading(false);
+        //navigate to ride tracking page (to be implemented)
+      });
+
+      return () => {
+        socket.off("RIDE_ACCEPTED");
+      };
+    });
 
     const canEstimate = useMemo(() => {
         return pickup.trim() !== "" && drop.trim() !== "";
@@ -91,15 +112,20 @@ const HomePage: React.FC = () => {
                     Authorization: `Bearer ${token}`
                 }
             });
-            alert("Ride requested successfully! Ride ID: " + response.data.ride.id);
+            socket.emit("NEW_RIDE_REQUEST", {
+                rideId: response.data.rideId,
+                pickup,
+                destination: drop,
+                pickupCoords: dummyCoords.pickup,
+                destCoords: dummyCoords.dest,
+                vehicleType,
+            });
         } catch (err) {
             if (axios.isAxiosError(err)) {
                 setError(err.response?.data.message || "Failed to request ride.");
             } else {
                 setError("Failed to request ride.");
             }
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -175,6 +201,20 @@ const HomePage: React.FC = () => {
             >
               {loading ? "Finding a Captain..." : `Request ${vehicleType || 'Ride'}`}
             </button>
+
+            {/* 5. Cancel Ride Request button */}
+            {loading && (
+                <button
+                  onClick={() => {
+                    setLoading(false);
+                    setRideStatus(null);
+                    socket.emit("CANCEL_RIDE_REQUEST", { userId });
+                  }}
+                  className="w-full mt-6 bg-black text-white py-4 rounded-xl font-bold text-lg hover:bg-zinc-800 disabled:bg-gray-400 transition"
+                >
+                  Cancel Ride Request
+                </button>
+            )}
           </div>
         )}
       </div>
