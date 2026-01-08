@@ -3,6 +3,7 @@ import api from "../services/api";
 import { useState, useMemo, useEffect } from "react";
 import { MapPin, Navigation, Car, Bike, Zap } from 'lucide-react';
 import { io } from "socket.io-client";
+import { useNavigate } from "react-router-dom";
 
 const HomePage: React.FC = () => {
     const [pickup, setPickup] = useState("");
@@ -21,10 +22,13 @@ const HomePage: React.FC = () => {
         }
     });
 
+    const navigate = useNavigate();
     useEffect(() => {
-      socket.on("RIDE_ACCEPTED", () => {
+      socket.on("RIDE_ACCEPTED", (data) => {
         setLoading(false);
         //navigate to ride tracking page (to be implemented)
+        console.log("Ride accepted, navigating to tracking page...");
+        navigate("/rider-tracking", { state: { ride: data } });
       });
 
       return () => {
@@ -270,7 +274,7 @@ const HomePage: React.FC = () => {
           onClick={() => {
             localStorage.removeItem("token");
             localStorage.removeItem("role");
-            window.location.href = "/login";
+            navigate("/login");
           }}
           className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
         >

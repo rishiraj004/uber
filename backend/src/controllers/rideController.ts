@@ -139,7 +139,10 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             captainLocation: {
                 latitude: updatedRide.captain?.lastLat,
                 longitude: updatedRide.captain?.lastLng
-            }
+            },
+            fare: updatedRide.fare,
+            otp: updatedRide.otp,
+            message: "Your ride has been accepted!"
         });
 
         res.status(200).json({ 

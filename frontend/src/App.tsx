@@ -4,6 +4,8 @@ import SignupPage from './pages/signup'
 import LoginPage from './pages/login'
 import HomePage from './pages/home'
 import CaptainDashboard from './pages/captain-dashboard'
+import RiderTracking from './pages/RiderTracking'
+
 
 function App() {
   return (
@@ -14,6 +16,7 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/captain/dashboard" element={<CaptainDashboard />} />
+        <Route path="/rider-tracking" element={<RiderTracking />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
