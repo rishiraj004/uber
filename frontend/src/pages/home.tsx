@@ -2,8 +2,8 @@ import axios from "axios";
 import api from "../services/api";
 import { useState, useMemo, useEffect } from "react";
 import { MapPin, Navigation, Car, Bike, Zap } from 'lucide-react';
-import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
+import { useSocket } from "../context/socket-context";
 
 const HomePage: React.FC = () => {
     const [pickup, setPickup] = useState("");
@@ -15,26 +15,23 @@ const HomePage: React.FC = () => {
     const [error, setError] = useState("");
     const [rideId, setRideId] = useState<number | null>(null);
 
-    const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
-    const socket = io("http://localhost:3000", {
-        query: {
-            userId: userId
-        }
-    });
-
+    const socket = useSocket();
     const navigate = useNavigate();
+
     useEffect(() => {
-      socket.on("RIDE_ACCEPTED", (data) => {
+      if (!socket) return;
+
+      const handleRideAccepted = (data: { [key: string]: unknown }) => {
         setLoading(false);
-        //navigate to ride tracking page (to be implemented)
-        console.log("Ride accepted, navigating to tracking page...");
         navigate("/rider-tracking", { state: { ride: data } });
-      });
+      }
+
+      socket.on("RIDE_ACCEPTED", handleRideAccepted);
 
       return () => {
-        socket.off("RIDE_ACCEPTED");
+        socket.off("RIDE_ACCEPTED", handleRideAccepted);
       };
-    });
+    }, [socket, navigate]);
 
     const canEstimate = useMemo(() => {
         return pickup.trim() !== "" && drop.trim() !== "";
@@ -115,14 +112,6 @@ const HomePage: React.FC = () => {
                 }
             });
             setRideId(response.data.ride.id);
-            socket.emit("NEW_RIDE_REQUEST", {
-                rideId: response.data.ride.id,
-                pickup,
-                destination: drop,
-                pickupCoords: dummyCoords.pickup,
-                destCoords: dummyCoords.dest,
-                vehicleType,
-            });
         } catch (err) {
             if (axios.isAxiosError(err)) {
                 setError(err.response?.data.message || "Failed to request ride.");
@@ -139,11 +128,7 @@ const HomePage: React.FC = () => {
             setError("No ride to cancel.");
             return;
         }
-        await api.post("/ride/cancel-ride", {rideId}, {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem("token")}`
-            }
-        });
+        await api.post("/ride/cancel-ride", {rideId});
     }
 
     return (

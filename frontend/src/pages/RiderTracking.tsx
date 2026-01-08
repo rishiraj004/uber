@@ -4,9 +4,9 @@ import {
   Phone, MessageSquare, ShieldCheck, 
   XCircle, AlertTriangle, Info, CheckCircle2 
 } from 'lucide-react';
-import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
+import { useSocket } from '../context/socket-context';
 
 // --- Sub-component: Ride Status Stepper ---
 const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
@@ -43,11 +43,8 @@ const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
   );
 };
 
-// ride cancelling by user function handling
-const RideCancelling = async (rideId: string) => {
-        console.log("Cancelling ride with ID:", rideId);
-        const response = await api.post('/ride/cancel-ride', { rideId });
-        console.log("Ride cancelled successfully:", response.data);
+const RideCancelled = async (rideId: string) => {
+  await api.post('/ride/cancel-ride', { rideId });
 }
 
 const RiderTracking = () => {
@@ -58,34 +55,27 @@ const RiderTracking = () => {
   const [rideStatus, setRideStatus] = useState(rideData?.status || 'ACCEPTED');
   const [showFareBreakdown, setShowFareBreakdown] = useState(false);
 
-  const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
-  const socket = io("http://localhost:3000", {
-  query: {
-        userId: userId
-  }
-  });
+  const socket = useSocket();
 
   useEffect(() => {
-    socket.on("RIDE_CANCELLED", (data) => {
-        console.log("Ride Cancelled Notification:", data);
-        navigate('/home'); // later will implement a better way to show cancellation
-        setRideStatus('CANCELLED');
+    if (!socket) return;
+
+    const listeners = {
+      RIDE_CANCELLED: () => { navigate('/home'); setRideStatus('CANCELLED'); },
+      RIDE_ARRIVED: () => { setRideStatus('ARRIVED'); },
+      RIDE_STARTED: () => { setRideStatus('ONGOING'); },
+      RIDE_COMPLETED: () => { 
+        setRideStatus('COMPLETED'); 
+        navigate('/receipt', { state: { ride: rideData } }); 
+      }
+    }
+    Object.entries(listeners).forEach(([event, handler]) => {
+      socket.on(event, handler);
     });
 
-    socket.on('RIDE_ARRIVED', () => { //not in backend yet
-        console.log('Ride has arrived');
-        setRideStatus('ARRIVED')
-    });
-    socket.on('RIDE_STARTED', () => {
-        console.log('Ride has started');
-        setRideStatus('ONGOING')
-    });
-    socket.on('RIDE_COMPLETED', () => {
-        setRideStatus('COMPLETED');
-        navigate('/receipt', { state: { ride: rideData } }); //will be implemented later
-    });
-
-    return () => { socket.off(); };
+    return () => { 
+      Object.keys(listeners).forEach(event => { socket.off(event) });
+    };
   }, [rideData, navigate, socket]);
 
   return (
@@ -199,7 +189,7 @@ const RiderTracking = () => {
         {/* Footer Actions */}
         <div className="flex items-center justify-between border-t border-gray-100 pt-6">
            <button 
-             onClick={() => RideCancelling(rideData?.rideId)}
+             onClick={() => RideCancelled(rideData?.rideId)}
              className="flex items-center gap-2 text-red-600 font-bold text-sm hover:opacity-70 transition-opacity"
            >
              <XCircle size={18} /> Cancel Ride

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, Phone, MessageSquare, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert } from 'lucide-react';
 import api from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
-import { io } from 'socket.io-client';
+import { useSocket } from '../context/socket-context';
 
 const CaptainTracking = () => {
   const location = useLocation();
@@ -17,20 +17,20 @@ const CaptainTracking = () => {
   // 1. Phase Logic: ACCEPTED -> ARRIVED -> ONGOING -> COMPLETED
   const handleArrived = () => setRideStatus('ARRIVED');
 
-  const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
-    const socket = io("http://localhost:3000", {
-        query: {
-            userId: userId
-        }
-    });
+  const socket = useSocket();
   useEffect(() => {
-    socket.on("RIDE_CANCELLED", (data) => {
-      console.log("Ride Cancelled Notification:", data);
-      setRideStatus('CANCELLED');
-    });
+    if (!socket) return;
 
-    return () => { socket.off("RIDE_CANCELLED"); };
-  });
+    const handleRideCancellation = (data: { rideId: number }) => {
+      if (data.rideId === initialRide.id) {
+        alert("The rider has cancelled the ride.");
+        navigate('/captain-dashboard');
+      }
+    }
+    socket.on("RIDE_CANCELLED", handleRideCancellation);
+
+    return () => { socket.off("RIDE_CANCELLED", handleRideCancellation); };
+  }, [initialRide.id, navigate, socket]);
 
   const handleStartTrip = async () => {
     if (otp.length !== 4) return alert("Enter 4-digit OTP");
@@ -39,6 +39,7 @@ const CaptainTracking = () => {
       await api.post('/ride/start-ride', { rideId: initialRide.id, otp });
       setRideStatus('ONGOING');
     } catch (err: any) {
+      console.error(err);
       alert(err.response?.data?.message || "Invalid OTP");
     } finally {
       setLoading(false);
@@ -52,6 +53,7 @@ const CaptainTracking = () => {
       navigate('/captain-dashboard'); // Return to searching for rides
     } catch (err) {
       alert("Error completing trip");
+      console.error(err);
     } finally {
       setLoading(false);
     }

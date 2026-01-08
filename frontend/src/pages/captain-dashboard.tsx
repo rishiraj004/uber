@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { io } from 'socket.io-client';
 import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
+import { useSocket } from '../context/socket-context';
 
 interface RideRequest {
   rideId: number;
@@ -15,42 +15,37 @@ interface RideRequest {
 const CaptainDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [currentRideRequest, setCurrentRideRequest] = useState<RideRequest | null>(null);
-
-    const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
-    const socket = io("http://localhost:3000", {
-        query: {
-            userId: userId
-        }
-    });
+  
+  const socket = useSocket();
+  const navigate = useNavigate();
 
   // 1. Initialize Socket.io Connection
   useEffect(() => {
-    socket.on('NEW_RIDE_REQUEST', (data) => {
-      console.log("New Ride Request Received:", data);
+    if (!socket) return;
+
+    const handleNewRideRequest = (data: RideRequest) => {
       setCurrentRideRequest(data);
-    });
+    }
 
-    return () => { socket.off("NEW_RIDE_REQUEST"); };
-  });
+    const handleCancelRide = (data: { rideId: number }) => {
+      if (currentRideRequest && data.rideId === currentRideRequest.rideId) {
+        setCurrentRideRequest(null);
+      }
+    };
 
-  const navigate = useNavigate();
+    socket.on('NEW_RIDE_REQUEST', handleNewRideRequest);
+    socket.on('RIDE_CANCELLED', handleCancelRide);
 
-  useEffect(() => {
-    socket.on("RIDE_CANCELLED", (data) => {
-      console.log("Ride Cancelled Notification:", data);
-      setCurrentRideRequest(null);
-    });
-
-    return () => { socket.off("RIDE_CANCELLED"); };
-  });
+    return () => { 
+      socket.off("NEW_RIDE_REQUEST", handleNewRideRequest); 
+      socket.off("RIDE_CANCELLED", handleCancelRide);
+    };
+  }, [socket, currentRideRequest]);
 
   // 2. Toggle Availability (PATCH /toggle-status)
   const handleStatusToggle = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await api.patch('/captain/toggle-status', {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.patch('/captain/toggle-status');
       setIsOnline(response.data.isOnline);
     } catch (error) {
       console.error("Error toggling status", error);
@@ -60,10 +55,7 @@ const CaptainDashboard = () => {
   // 3. Accept Ride Logic (POST /accept-ride)
   const acceptRide = async (rideId: number) => {
     try {
-      const token = localStorage.getItem('token');
-      await api.post('ride/accept-ride', { rideId }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.post('/captain/accept-ride', { rideId });
       navigate('/captain-tracking', { state: { ride: { id: rideId } } });
       setCurrentRideRequest(null);
     } catch (error) {
