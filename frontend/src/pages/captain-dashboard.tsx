@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { io } from 'socket.io-client';
 import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
@@ -29,23 +30,15 @@ const CaptainDashboard = () => {
       setCurrentRideRequest(data);
     });
 
-    return () => { socket.close(); };
+    return () => { socket.off("NEW_RIDE_REQUEST"); };
   });
 
-  useEffect(() => {
-    socket.on("RIDE_ACCEPTED", (data) => {
-      console.log("Ride Accepted Notification:", data);
-      setCurrentRideRequest(null);
-    });
-
-    return () => { socket.off("RIDE_ACCEPTED"); };
-  });
+  const navigate = useNavigate();
 
   useEffect(() => {
     socket.on("RIDE_CANCELLED", (data) => {
       console.log("Ride Cancelled Notification:", data);
       setCurrentRideRequest(null);
-      console.log("Current ride has been cancelled by the rider.");
     });
 
     return () => { socket.off("RIDE_CANCELLED"); };
@@ -71,7 +64,7 @@ const CaptainDashboard = () => {
       await api.post('ride/accept-ride', { rideId }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert("Ride Accepted! Navigate to pickup.");
+      navigate('/captain-tracking', { state: { ride: { id: rideId } } });
       setCurrentRideRequest(null);
     } catch (error) {
       console.error("Error accepting ride", error);

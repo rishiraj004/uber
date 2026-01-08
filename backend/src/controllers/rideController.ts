@@ -196,11 +196,6 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             })
         ]);
 
-        await prisma.user.update({
-            where: { id: captainId },
-            data: { isOnline: false }
-        });
-
         sendNotification(ongoingRide.riderId , "RIDE_STARTED", {
             rideId: ongoingRide.id,
             status: ongoingRide.status

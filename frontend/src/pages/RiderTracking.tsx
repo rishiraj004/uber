@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
+import api from '../services/api';
 
 // --- Sub-component: Ride Status Stepper ---
 const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
@@ -42,6 +43,13 @@ const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
   );
 };
 
+// ride cancelling by user function handling
+const RideCancelling = async (rideId: string) => {
+        console.log("Cancelling ride with ID:", rideId);
+        const response = await api.post('/ride/cancel-ride', { rideId });
+        console.log("Ride cancelled successfully:", response.data);
+}
+
 const RiderTracking = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,11 +66,26 @@ const RiderTracking = () => {
   });
 
   useEffect(() => {
-    socket.on('RIDE_ARRIVED', () => setRideStatus('ARRIVED'));
-    socket.on('RIDE_STARTED', () => setRideStatus('ONGOING'));
-    socket.on('RIDE_COMPLETED', () => navigate('/receipt', { state: { ride: rideData } }));
+    socket.on("RIDE_CANCELLED", (data) => {
+        console.log("Ride Cancelled Notification:", data);
+        navigate('/home'); // later will implement a better way to show cancellation
+        setRideStatus('CANCELLED');
+    });
 
-    return () => { socket.disconnect(); };
+    socket.on('RIDE_ARRIVED', () => { //not in backend yet
+        console.log('Ride has arrived');
+        setRideStatus('ARRIVED')
+    });
+    socket.on('RIDE_STARTED', () => {
+        console.log('Ride has started');
+        setRideStatus('ONGOING')
+    });
+    socket.on('RIDE_COMPLETED', () => {
+        setRideStatus('COMPLETED');
+        navigate('/receipt', { state: { ride: rideData } }); //will be implemented later
+    });
+
+    return () => { socket.off(); };
   }, [rideData, navigate, socket]);
 
   return (
@@ -70,7 +93,7 @@ const RiderTracking = () => {
       
       {/* 1. SOS Button (Feature #1) */}
       <button 
-        onClick={() => alert("Emergency alert sent to local authorities and emergency contacts.")}
+        onClick={() => alert("Emergency alert sent to local authorities and emergency contacts.")} // later will implement actual SOS functionality
         className="absolute top-6 right-6 z-50 bg-red-600 text-white p-3 rounded-full shadow-2xl hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center"
         title="Emergency SOS"
         aria-label="Emergency SOS button"
@@ -176,7 +199,7 @@ const RiderTracking = () => {
         {/* Footer Actions */}
         <div className="flex items-center justify-between border-t border-gray-100 pt-6">
            <button 
-             onClick={() => navigate('/home')}
+             onClick={() => RideCancelling(rideData?.rideId)}
              className="flex items-center gap-2 text-red-600 font-bold text-sm hover:opacity-70 transition-opacity"
            >
              <XCircle size={18} /> Cancel Ride

@@ -52,7 +52,6 @@ const HomePage: React.FC = () => {
             return;
         }
         try {
-          console.log("Estimating fare for:", { pickup, drop });
             const responseCar = await api.post("/ride/calculate-fare", {
                 pickupCoords: dummyCoords.pickup,
                 destCoords: dummyCoords.dest,
