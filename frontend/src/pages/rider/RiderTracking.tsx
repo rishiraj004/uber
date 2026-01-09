@@ -62,7 +62,7 @@ const RiderTracking = () => {
 
     const listeners = {
       RIDE_CANCELLED: () => { navigate('/rider-dashboard'); setRideStatus('CANCELLED'); },
-      RIDE_ARRIVED: () => { setRideStatus('ARRIVED'); },
+      CAPTAIN_ARRIVED: () => { setRideStatus('ARRIVED'); },
       RIDE_STARTED: () => { setRideStatus('ONGOING'); },
       RIDE_COMPLETED: () => { 
         setRideStatus('COMPLETED'); 

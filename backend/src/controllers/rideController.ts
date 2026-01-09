@@ -216,7 +216,7 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
 
-        if(ride.status !== "ACCEPTED") {
+        if(ride.status !== "ARRIVED") {
             return res.status(400).json({ message: `Cannot start ride in ${ride.status} status.` });
         }
 

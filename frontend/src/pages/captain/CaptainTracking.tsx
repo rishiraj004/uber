@@ -15,7 +15,15 @@ const CaptainTracking = () => {
   const [loading, setLoading] = useState(false);
 
   // 1. Phase Logic: ACCEPTED -> ARRIVED -> ONGOING -> COMPLETED
-  const handleArrived = () => setRideStatus('ARRIVED');
+  const handleArrived = async () => {
+    try{
+      await api.post('/ride/arrived-at-pickup', { rideId: initialRide.id });
+      setRideStatus('ARRIVED');
+    } catch (err) {
+      console.error(err);
+      alert("Error updating status to ARRIVED");
+    }
+  };
 
   const socket = useSocket();
   useEffect(() => {
