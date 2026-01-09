@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api from '../../services/api';
 import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
-import { useSocket } from '../context/socket-context';
+import { useSocket } from '../../context/socket-context';
 
 interface RideRequest {
   rideId: number;
@@ -55,7 +55,7 @@ const CaptainDashboard = () => {
   // 3. Accept Ride Logic (POST /accept-ride)
   const acceptRide = async (rideId: number) => {
     try {
-      await api.post('/captain/accept-ride', { rideId });
+      await api.post('/ride/accept-ride', { rideId });
       navigate('/captain-tracking', { state: { ride: { id: rideId } } });
       setCurrentRideRequest(null);
     } catch (error) {

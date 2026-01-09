@@ -1,9 +1,9 @@
 import axios from "axios";
-import api from "../services/api";
+import api from "../../services/api";
 import { useState, useMemo, useEffect } from "react";
 import { MapPin, Navigation, Car, Bike, Zap } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
-import { useSocket } from "../context/socket-context";
+import { useSocket } from "../../context/socket-context";
 
 const HomePage: React.FC = () => {
     const [pickup, setPickup] = useState("");

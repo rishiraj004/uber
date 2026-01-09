@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert } from 'lucide-react';
-import api from '../services/api';
+import api from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSocket } from '../context/socket-context';
+import { useSocket } from '../../context/socket-context';
 
 const CaptainTracking = () => {
   const location = useLocation();

@@ -5,8 +5,8 @@ import {
   XCircle, AlertTriangle, Info, CheckCircle2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import api from '../services/api';
-import { useSocket } from '../context/socket-context';
+import api from '../../services/api';
+import { useSocket } from '../../context/socket-context';
 
 // --- Sub-component: Ride Status Stepper ---
 const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
@@ -61,7 +61,7 @@ const RiderTracking = () => {
     if (!socket) return;
 
     const listeners = {
-      RIDE_CANCELLED: () => { navigate('/home'); setRideStatus('CANCELLED'); },
+      RIDE_CANCELLED: () => { navigate('/rider-dashboard'); setRideStatus('CANCELLED'); },
       RIDE_ARRIVED: () => { setRideStatus('ARRIVED'); },
       RIDE_STARTED: () => { setRideStatus('ONGOING'); },
       RIDE_COMPLETED: () => { 

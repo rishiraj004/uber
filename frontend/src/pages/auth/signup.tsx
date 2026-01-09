@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import api from "../services/api";
+import api from "../../services/api";
 
 type Role = "RIDER" | "CAPTAIN";
 
@@ -70,8 +70,8 @@ const SignupPage: React.FC = () => {
       localStorage.setItem("token", token);
       localStorage.setItem("role", userRole);
 
-      if (userRole === "CAPTAIN") navigate("/captain/dashboard", { replace: true });
-      else navigate("/home", { replace: true });
+      if (userRole === "CAPTAIN") navigate("/captain-dashboard", { replace: true });
+      else navigate("/rider-dashboard", { replace: true });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err));
     } finally {
