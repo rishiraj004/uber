@@ -19,12 +19,31 @@ const CaptainDashboard = () => {
   const socket = useSocket();
   const navigate = useNavigate();
 
-  // 1. Initialize Socket.io Connection
+  useEffect(() => {
+    const checkActiveRide = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        
+        if (!token) return;
+        const userId = JSON.parse(atob(token.split('.')[1])).userId;
+        const response = await api.get(`/ride/details/${userId}`);
+
+        if (response.data.ride && (response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
+          navigate("/captain-tracking", { state: { ride: response.data.ride } });
+        }
+      } catch (err) {
+        console.error("Error checking active ride:", err);
+      }
+    }
+    checkActiveRide();
+  }, [navigate]);
+
   useEffect(() => {
     if (!socket) return;
 
     const handleNewRideRequest = (data: RideRequest) => {
       setCurrentRideRequest(data);
+      console.log("New Ride Request Received:", data);
     }
 
     const handleCancelRide = (data: { rideId: number }) => {
@@ -56,7 +75,7 @@ const CaptainDashboard = () => {
   const acceptRide = async (rideId: number) => {
     try {
       await api.post('/ride/accept-ride', { rideId });
-      navigate('/captain-tracking', { state: { ride: { id: rideId } } });
+      navigate('/captain-tracking', { state: { ride: { currentRideRequest } } });
       setCurrentRideRequest(null);
     } catch (error) {
       console.error("Error accepting ride", error);

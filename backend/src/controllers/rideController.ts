@@ -32,13 +32,42 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
 
 export const getRideDetails = async ( req: AuthRequest, res: Response) => {
     try {
-        const { rideId } = req.params;
-        if(!rideId) {
-            return res.status(400).json({ message: "Ride ID is required." });
+        const { userId } = req.params;
+        
+        if(!userId) {
+            return res.status(400).json({ message: "User ID is required." });
         }
-        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
-        if(!ride) {
-            return res.status(404).json({ message: "Ride not found" });
+
+        const role = req.user?.role;
+        let ride;
+        if(role === "RIDER") {
+            ride = await prisma.ride.findFirst({
+                where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] } },
+                include: {
+                    captain: {
+                        select: {
+                            fullName: true,
+                            rating: true,
+                            lastLat: true,
+                            lastLng: true
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+        } else if(role === "CAPTAIN") {
+            ride = await prisma.ride.findFirst({
+                where: { captainId: Number(userId), status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] } },
+                include: {
+                    rider: {
+                        select: {
+                            fullName: true,
+                            rating: true
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
         }
         res.status(200).json({ ride });
     } catch (error) {
@@ -56,6 +85,7 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         }
 
         const riderId = req.user?.userId;
+        const riderName = await prisma.user.findUnique({ where: { id: riderId! } }).then(user => user?.fullName || "Rider");
 
         const otp = crypto.randomInt(1000, 9999).toString();
         const distanceKm = distanceBetweenPoints(
@@ -93,7 +123,7 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                     pickupAddress: newRide.pickupAddress,
                     dropoffAddress: newRide.dropoffAddress,
                     fare: newRide.fare,
-                    riderName: req.user?.name || "Rider"
+                    riderName: riderName
                 }
             );
         });

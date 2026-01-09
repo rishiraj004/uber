@@ -8,7 +8,7 @@ import { useSocket } from '../../context/socket-context';
 const CaptainTracking = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const initialRide = location.state?.ride;
+  const initialRide = location.state?.ride.currentRideRequest;
 
   const [rideStatus, setRideStatus] = useState(initialRide?.status || 'ACCEPTED');
   const [otp, setOtp] = useState('');
@@ -17,7 +17,7 @@ const CaptainTracking = () => {
   // 1. Phase Logic: ACCEPTED -> ARRIVED -> ONGOING -> COMPLETED
   const handleArrived = async () => {
     try{
-      await api.post('/ride/arrived-at-pickup', { rideId: initialRide.id });
+      await api.post('/ride/arrived-at-pickup', { rideId: initialRide.rideId });
       setRideStatus('ARRIVED');
     } catch (err) {
       console.error(err);
@@ -30,7 +30,7 @@ const CaptainTracking = () => {
     if (!socket) return;
 
     const handleRideCancellation = (data: { rideId: number }) => {
-      if (data.rideId === initialRide.id) {
+      if (data.rideId === initialRide.rideId) {
         alert("The rider has cancelled the ride.");
         navigate('/captain-dashboard');
       }
@@ -38,13 +38,13 @@ const CaptainTracking = () => {
     socket.on("RIDE_CANCELLED", handleRideCancellation);
 
     return () => { socket.off("RIDE_CANCELLED", handleRideCancellation); };
-  }, [initialRide.id, navigate, socket]);
+  }, [initialRide.rideId, navigate, socket]);
 
   const handleStartTrip = async () => {
     if (otp.length !== 4) return alert("Enter 4-digit OTP");
     setLoading(true);
     try {
-      await api.post('/ride/start-ride', { rideId: initialRide.id, otp });
+      await api.post('/ride/start-ride', { rideId: initialRide.rideId, otp });
       setRideStatus('ONGOING');
     } catch (err: any) {
       console.error(err);
@@ -57,7 +57,7 @@ const CaptainTracking = () => {
   const handleCompleteTrip = async () => {
     setLoading(true);
     try {
-      await api.post('/ride/complete-ride', { rideId: initialRide.id });
+      await api.post('/ride/complete-ride', { rideId: initialRide.rideId });
       navigate('/captain-dashboard'); // Return to searching for rides
     } catch (err) {
       alert("Error completing trip");

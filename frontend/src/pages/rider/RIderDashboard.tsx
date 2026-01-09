@@ -19,6 +19,25 @@ const HomePage: React.FC = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
+      const checkActiveRide = async () => {
+        try {
+          const token = localStorage.getItem("token");
+          
+          if (!token) return;
+          const userId = JSON.parse(atob(token.split('.')[1])).userId;
+          const response = await api.get(`/ride/details/${userId}`);
+
+          if (response.data.ride && (response.data.ride.status === 'PENDING' || response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
+            navigate("/rider-tracking", { state: { ride: response.data.ride } });
+          }
+        } catch (err) {
+          console.error("Error checking active ride:", err);
+        }
+      }
+      checkActiveRide();
+    }, [navigate]);
+
+    useEffect(() => {
       if (!socket) return;
 
       const handleRideAccepted = (data: { [key: string]: unknown }) => {
@@ -77,7 +96,6 @@ const HomePage: React.FC = () => {
             }
         }
     };
-
 
     const handleRequestRide = async () => {
         setError("");

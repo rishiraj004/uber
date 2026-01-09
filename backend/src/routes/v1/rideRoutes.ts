@@ -5,7 +5,7 @@ import { calculateFare, getRideDetails, createRide, acceptRide, arrivedAtPickup,
 
 const router = Router();
 
-router.get("/details/:rideId", authenticate, getRideDetails);
+router.get("/details/:userId", authenticate, getRideDetails);
 router.post("/calculate-fare", authenticate, authorizeRole("RIDER"), calculateFare);
 
 router.post("/create-ride", authenticate, authorizeRole("RIDER"), createRide);
