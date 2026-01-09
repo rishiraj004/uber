@@ -1,10 +1,11 @@
 import { authorizeRole } from "../../middlewares/roleMiddlewares";
 import { authenticate } from "../../middlewares/authMiddelwares";
 import { Router } from "express";
-import { calculateFare, createRide, acceptRide, arrivedAtPickup, startRide, completeRide, cancelRide } from "../../controllers/rideController";
+import { calculateFare, getRideDetails, createRide, acceptRide, arrivedAtPickup, startRide, completeRide, cancelRide } from "../../controllers/rideController";
 
 const router = Router();
 
+router.get("/details/:rideId", authenticate, getRideDetails);
 router.post("/calculate-fare", authenticate, authorizeRole("RIDER"), calculateFare);
 
 router.post("/create-ride", authenticate, authorizeRole("RIDER"), createRide);

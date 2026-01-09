@@ -30,6 +30,23 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
     }   
 };
 
+export const getRideDetails = async ( req: AuthRequest, res: Response) => {
+    try {
+        const { rideId } = req.params;
+        if(!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+        if(!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+        res.status(200).json({ ride });
+    } catch (error) {
+        console.error("Error fetching ride details:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }   
+};
+
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {
         const { vehicleType , pickupCoords , destCoords , pickup , destination } = req.body;
