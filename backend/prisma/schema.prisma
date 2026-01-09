@@ -21,6 +21,7 @@ enum Role {
 enum RideStatus {
   PENDING
   ACCEPTED
+  ARRIVED
   ONGOING
   COMPLETED
   CANCELLED

@@ -22,8 +22,8 @@ const HomePage: React.FC = () => {
       if (!socket) return;
 
       const handleRideAccepted = (data: { [key: string]: unknown }) => {
-        setLoading(false);
         navigate("/rider-tracking", { state: { ride: data } });
+        setLoading(false);
       }
 
       socket.on("RIDE_ACCEPTED", handleRideAccepted);

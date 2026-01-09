@@ -155,6 +155,45 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
     }
 };
 
+export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const captainId = req.user?.userId;
+        const { rideId } = req.body;
+        if(!captainId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        if(!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+        if(!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+        if(ride.captainId !== captainId) {
+            return res.status(403).json({ message: "You are not assigned to this ride." });
+        }
+        if(ride.status !== "ACCEPTED") {
+            return res.status(400).json({ message: `Cannot mark arrival for ride in ${ride.status} status.` });
+        }
+        const updatedRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: { status: "ARRIVED" },
+        });
+        sendNotification(updatedRide.riderId , "CAPTAIN_ARRIVED", {
+            rideId: updatedRide.id,
+            status: updatedRide.status,
+            message: "Your captain has arrived at the pickup location."
+        });
+        res.status(200).json({
+            message: "Marked arrival at pickup successfully",
+            ride: updatedRide 
+        });
+    } catch (error) {
+        console.error("Error marking arrival at pickup:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }   
+};
+
 export const startRide = async ( req : AuthRequest , res : Response ) => {
     try {
         const captainId = req.user?.userId;
