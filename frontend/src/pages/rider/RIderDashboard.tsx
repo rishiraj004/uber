@@ -5,7 +5,7 @@ import { MapPin, Navigation, Car, Bike, Zap } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../../context/socket-context";
 
-const HomePage: React.FC = () => {
+const RiderDashboard: React.FC = () => {
     const [pickup, setPickup] = useState("");
     const [drop, setDrop] = useState("");
     const [vehicleType, setVehicleType] = useState<"CAR" | "BIKE" | "AUTO">("CAR");
@@ -288,4 +288,4 @@ const HomePage: React.FC = () => {
   );
 };
 
-export default HomePage;
+export default RiderDashboard;
