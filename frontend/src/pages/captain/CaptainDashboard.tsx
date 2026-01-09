@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
 import { useSocket } from '../../context/socket-context';
+import toast from 'react-hot-toast';
 
 interface RideRequest {
   rideId: number;
@@ -43,12 +44,16 @@ const CaptainDashboard = () => {
 
     const handleNewRideRequest = (data: RideRequest) => {
       setCurrentRideRequest(data);
-      console.log("New Ride Request Received:", data);
+      toast('New Ride Request!', {
+        icon: '🚗',
+        style: { borderRadius: '10px', background: '#333', color: '#fff' },
+      });
     }
 
     const handleCancelRide = (data: { rideId: number }) => {
       if (currentRideRequest && data.rideId === currentRideRequest.rideId) {
         setCurrentRideRequest(null);
+        toast('Ride Request Cancelled by Rider');
       }
     };
 
@@ -79,7 +84,7 @@ const CaptainDashboard = () => {
       setCurrentRideRequest(null);
     } catch (error) {
       console.error("Error accepting ride", error);
-      alert("Could not accept ride.");
+      toast.error("Could not accept ride.");
     }
   };
 

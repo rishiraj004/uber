@@ -4,6 +4,7 @@ import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert } from 'lucide-re
 import api from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../../context/socket-context';
+import toast from 'react-hot-toast';
 
 const CaptainTracking = () => {
   const location = useLocation();
@@ -21,7 +22,7 @@ const CaptainTracking = () => {
       setRideStatus('ARRIVED');
     } catch (err) {
       console.error(err);
-      alert("Error updating status to ARRIVED");
+      toast.error("Error updating status to ARRIVED");
     }
   };
 
@@ -31,7 +32,7 @@ const CaptainTracking = () => {
 
     const handleRideCancellation = (data: { rideId: number }) => {
       if (data.rideId === initialRide.rideId) {
-        alert("The rider has cancelled the ride.");
+        toast('Ride Cancelled by Rider');
         navigate('/captain-dashboard');
       }
     }
@@ -48,7 +49,7 @@ const CaptainTracking = () => {
       setRideStatus('ONGOING');
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.message || "Invalid OTP");
+      toast.error(err.response?.data?.message || "Error starting trip");
     } finally {
       setLoading(false);
     }
@@ -60,7 +61,7 @@ const CaptainTracking = () => {
       await api.post('/ride/complete-ride', { rideId: initialRide.rideId });
       navigate('/captain-dashboard'); // Return to searching for rides
     } catch (err) {
-      alert("Error completing trip");
+      toast.error("Error completing trip");
       console.error(err);
     } finally {
       setLoading(false);
