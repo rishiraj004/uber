@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
@@ -17,6 +17,7 @@ const CaptainDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [currentRideRequest, setCurrentRideRequest] = useState<RideRequest | null>(null);
   
+  const watchId = useRef<number | null>(null);
   const socket = useSocket();
   const navigate = useNavigate();
 
@@ -38,6 +39,38 @@ const CaptainDashboard = () => {
     }
     checkActiveRide();
   }, [navigate]);
+
+  useEffect(() => {
+    if (isOnline && socket) {
+      watchId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          socket.emit('CAPTAIN_LOCATION_UPDATE', {
+            location: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            },
+            userId: JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId
+          });
+          console.log("Location sent:", position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    } else {
+      if (watchId.current !== null) {
+        navigator.geolocation.clearWatch(watchId.current);
+        watchId.current = null;
+      }
+    }
+
+    return () => {
+      if (watchId.current !== null) {
+        navigator.geolocation.clearWatch(watchId.current);
+      }
+    };
+  }, [isOnline, socket]);
 
   useEffect(() => {
     if (!socket) return;
@@ -79,7 +112,9 @@ const CaptainDashboard = () => {
   // 3. Accept Ride Logic (POST /accept-ride)
   const acceptRide = async (rideId: number) => {
     try {
-      await api.post('/ride/accept-ride', { rideId });
+      const response = await api.post('/ride/accept-ride', { rideId });
+      console.log("Ride accepted:", response.data);
+      console.log(currentRideRequest);
       navigate('/captain-tracking', { state: { ride: { currentRideRequest } } });
       setCurrentRideRequest(null);
     } catch (error) {

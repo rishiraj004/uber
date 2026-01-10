@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert } from 'lucide-react';
 import api from '../../services/api';
@@ -27,6 +27,36 @@ const CaptainTracking = () => {
   };
 
   const socket = useSocket();
+  const watchId = useRef<number | null>(null);
+  const isOnline = true;
+
+  useEffect(() => {
+    if (isOnline && socket) {
+      watchId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          socket.emit('CAPTAIN_LOCATION_UPDATE', {
+            location: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            },
+            userId: JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId
+          });
+          console.log("Location sent:", position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    };
+
+    return () => {
+      if (watchId.current !== null) {
+        navigator.geolocation.clearWatch(watchId.current);
+      }
+    };
+  }, [isOnline, socket]);
+
   useEffect(() => {
     if (!socket) return;
 

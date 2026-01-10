@@ -11,6 +11,7 @@ export const findNearbyCaptains = async ( riderLat: number , riderLng : number ,
         FROM "User"
         WHERE role = 'CAPTAIN' 
         AND "isOnline" = true
+        AND "isAvailable" = true
         AND (6371 * acos(
             cos(radians(${riderLat})) * cos(radians("lastLat")) *
             cos(radians("lastLng") - radians(${riderLng})) +

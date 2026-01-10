@@ -39,7 +39,7 @@ const RiderDashboard: React.FC = () => {
 
     useEffect(() => {
       if (!socket) return;
-
+      
       const handleRideAccepted = (data: { [key: string]: unknown }) => {
         navigate("/rider-tracking", { state: { ride: data } });
         setLoading(false);

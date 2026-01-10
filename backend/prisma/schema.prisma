@@ -73,10 +73,11 @@ model User {
   role      Role     @default(RIDER)
 
   //For captains only
-  isOnline   Boolean  @default(false)
-  lastLat    Float?
-  lastLng    Float?
-  rating     Float?   @default(0)
+  isOnline    Boolean  @default(false)
+  isAvailable Boolean  @default(true)
+  lastLat     Float?
+  lastLng     Float?
+  rating      Float?   @default(0)
   
   ridesAsRider   Ride[]   @relation("RiderRides")
   ridesAsCaptain Ride[]   @relation("CaptainRides")

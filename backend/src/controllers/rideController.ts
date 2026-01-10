@@ -49,7 +49,8 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                             fullName: true,
                             rating: true,
                             lastLat: true,
-                            lastLng: true
+                            lastLng: true,
+                            isOnline: true
                         }
                     }
                 },
@@ -160,23 +161,29 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: "Ride is no longer available." });
         }
 
-        const updatedRide = await prisma.ride.update({
-            where: { id: Number(rideId) },
-            data: {
-                captainId: captainId,
-                status: "ACCEPTED"
-            },
-            include: {
-                captain: {
-                    select: {
-                        fullName: true,
-                        rating: true,
-                        lastLat: true,
-                        lastLng: true
+        const [updatedRide, updatedCaptain] = await prisma.$transaction([
+            prisma.ride.update({
+                where: { id: Number(rideId) },
+                data: {
+                    captainId: captainId,
+                    status: "ACCEPTED"
+                },
+                include: {
+                    captain: {
+                        select: {
+                            fullName: true,
+                            rating: true,
+                            lastLat: true,
+                            lastLng: true
+                        }
                     }
                 }
-            }
-        });
+            }),
+            prisma.user.update({
+                where: { id: captainId },
+                data: { isAvailable: false }
+            })
+        ]);
 
         sendNotification(updatedRide.riderId , "RIDE_ACCEPTED", {
             rideId: updatedRide.id,
@@ -194,7 +201,7 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
 
         res.status(200).json({ 
             message: "Ride accepted successfully",
-            ride: updatedRide 
+            ride: updatedRide
         });
     } catch (error) {
         console.error("Error accepting ride:", error);
@@ -271,16 +278,10 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: "Invalid OTP." });
         }
 
-        const [ongoingRide, updatedCaptain] = await prisma.$transaction([
-            prisma.ride.update({
-                where: { id: Number(rideId) },
-                data: { status: "ONGOING", otp: null, startedAt: new Date() },
-            }),
-            prisma.user.update({
-                where: { id: captainId },
-                data: { isOnline: false }
-            })
-        ]);
+        const ongoingRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: { status: "ONGOING", otp: null, startedAt: new Date() },
+        });
 
         sendNotification(ongoingRide.riderId , "RIDE_STARTED", {
             rideId: ongoingRide.id,
@@ -331,7 +332,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             }),
             prisma.user.update({
                 where: { id: captainId },
-                data: { isOnline: false }
+                data: { isAvailable: true }
             })
         ]);
 
@@ -377,6 +378,13 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
             where: { id: Number(rideId) },
             data: { status: "CANCELLED" },
         });
+
+        if (ride.captainId) {
+            await prisma.user.update({
+                where: { id: ride.captainId },
+                data: { isAvailable: true }
+            });
+        }
 
         const partyIds = [ride.riderId];
         if (ride.captainId) partyIds.push(ride.captainId);
