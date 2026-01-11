@@ -10,10 +10,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!token) return;
 
     try {
-      const userId = JSON.parse(atob(token.split('.')[1])).userId;
-      
+      const token = localStorage.getItem("token");
+
       const newSocket = io("http://localhost:3000", {
-        query: { userId }
+        auth: { token }
       });
 
       newSocket.on("connect", () => {

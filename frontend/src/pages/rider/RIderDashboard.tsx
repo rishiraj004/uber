@@ -27,7 +27,7 @@ const RiderDashboard: React.FC = () => {
           const userId = JSON.parse(atob(token.split('.')[1])).userId;
           const response = await api.get(`/ride/details/${userId}`);
 
-          if (response.data.ride && (response.data.ride.status === 'PENDING' || response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
+          if (response.data.ride && (response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
             navigate("/rider-tracking", { state: { ride: response.data.ride } });
           }
         } catch (err) {
@@ -39,7 +39,7 @@ const RiderDashboard: React.FC = () => {
 
     useEffect(() => {
       if (!socket) return;
-      
+
       const handleRideAccepted = (data: { [key: string]: unknown }) => {
         navigate("/rider-tracking", { state: { ride: data } });
         setLoading(false);
@@ -57,8 +57,8 @@ const RiderDashboard: React.FC = () => {
     }, [pickup, drop]);
 
     const dummyCoords = {
-        pickup: { lat: 12.9716, lng: 77.5946 },
-        dest: { lat: 12.2958, lng: 76.6394 }
+        pickup: { lat: 25.25, lng: 87.03 },
+        dest: { lat: 25.28, lng: 87.05 }
     };
 
     const handleEstimateCost = async () => {
@@ -129,6 +129,8 @@ const RiderDashboard: React.FC = () => {
                     Authorization: `Bearer ${token}`
                 }
             });
+
+            console.log("Ride requested successfully:", response.data);
             setRideId(response.data.ride.id);
         } catch (err) {
             if (axios.isAxiosError(err)) {
