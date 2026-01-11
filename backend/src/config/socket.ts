@@ -46,9 +46,10 @@ export const initSocket = (httpServer: HttpServer) => {
             console.log(`User ${userId} connected with socket ID ${socket.id}`);
         }
 
-        socket.on("CAPTAIN_LOCATION_UPDATE", async (data: { location: { latitude: number; longitude: number }, userId: number }) => {
-            const { location, userId } = data;
-
+        socket.on("CAPTAIN_LOCATION_UPDATE", async (data: { location: { latitude: number; longitude: number }}) => {
+            const { location } = data;
+            const userId = socket.user?.userId;
+            if (!userId) return;
             try {
                 await prisma.user.update({
                     where: { id: userId },

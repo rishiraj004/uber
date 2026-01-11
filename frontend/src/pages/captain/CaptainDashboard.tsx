@@ -48,8 +48,7 @@ const CaptainDashboard = () => {
             location: {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
-            },
-            userId: JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId
+            }
           });
           console.log("Location sent:", position.coords.latitude, position.coords.longitude);
         },
