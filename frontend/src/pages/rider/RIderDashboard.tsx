@@ -57,7 +57,7 @@ const RiderDashboard: React.FC = () => {
     }, [pickup, drop]);
 
     const dummyCoords = {
-        pickup: { lat: 25.25, lng: 87.03 },
+        pickup: { lat: 23.41, lng: 85.40 },
         dest: { lat: 25.28, lng: 87.05 }
     };
 

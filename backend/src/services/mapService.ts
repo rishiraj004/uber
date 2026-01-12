@@ -1,25 +1,35 @@
 import prisma from "../config/prisma";
+import redis from "../config/redis";
 
 export const findNearbyCaptains = async ( riderLat: number , riderLng : number , radiusKm : number = 5) => {
-    const nearbyCaptains : Array<any>  = await prisma.$queryRaw`
-        SELECT id, "fullName", "lastLat", "lastLng", rating,
-        (6371 * acos(
-            cos(radians(${riderLat})) * cos(radians("lastLat")) *
-            cos(radians("lastLng") - radians(${riderLng})) +
-            sin(radians(${riderLat})) * sin(radians("lastLat"))
-        )) AS distance
-        FROM "User"
-        WHERE role = 'CAPTAIN' 
-        AND "isOnline" = true
-        AND "isAvailable" = true
-        AND (6371 * acos(
-            cos(radians(${riderLat})) * cos(radians("lastLat")) *
-            cos(radians("lastLng") - radians(${riderLng})) +
-            sin(radians(${riderLat})) * sin(radians("lastLat"))
-        )) <= ${radiusKm}
-        ORDER BY distance ASC
-        LIMIT 10;
-    `;
+    try {
+        const nearbyCaptainIDs = await redis.georadius(
+            "captain_locations",
+            riderLng,
+            riderLat,
+            radiusKm,
+            "km"
+        );
 
-    return nearbyCaptains;
+        if (!nearbyCaptainIDs || nearbyCaptainIDs.length === 0) return [];
+
+        return await prisma.user.findMany({
+            where: {
+                id: { in: nearbyCaptainIDs.map(id => Number(id)) },
+                isOnline: true,
+                role: 'CAPTAIN',
+                isAvailable: true
+            },
+            select: {
+                id: true,
+                fullName: true,
+                lastLat: true,
+                lastLng: true,
+                rating: true
+            }
+        });
+    } catch (error) {
+        console.error("Error finding nearby captains:", error);
+        return [];
+    }
 }
