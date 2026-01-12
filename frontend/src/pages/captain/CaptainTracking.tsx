@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 const CaptainTracking = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const initialRide = location.state?.ride.currentRideRequest;
+  const initialRide = location.state?.ride;
 
   const [rideStatus, setRideStatus] = useState(initialRide?.status || 'ACCEPTED');
   const [otp, setOtp] = useState('');
@@ -46,7 +46,7 @@ const CaptainTracking = () => {
         (error) => {
           console.error("Error getting location:", error);
         },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
       );
     };
 

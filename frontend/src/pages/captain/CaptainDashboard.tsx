@@ -112,9 +112,9 @@ const CaptainDashboard = () => {
   const acceptRide = async (rideId: number) => {
     try {
       const response = await api.post('/ride/accept-ride', { rideId });
-      console.log("Ride accepted:", response.data);
+      console.log(response.data);
       console.log(currentRideRequest);
-      navigate('/captain-tracking', { state: { ride: { currentRideRequest } } });
+      navigate('/captain-tracking', { state: { ride: currentRideRequest } });
       setCurrentRideRequest(null);
     } catch (error) {
       console.error("Error accepting ride", error);

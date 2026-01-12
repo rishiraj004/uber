@@ -3,7 +3,7 @@ import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import crypto from "crypto";
 import { findNearbyCaptains } from "../services/mapService";
-import { distanceBetweenPoints } from "../utils";
+import { distanceBetweenPoints, calculateTotalPathDistance } from "../utils";
 import { sendNotification } from "../config/socket";
 import { calculateRideFare } from "../services/rideService";
 
@@ -161,14 +161,16 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: "Ride is no longer available." });
         }
 
-        const [updatedRide, updatedCaptain] = await prisma.$transaction([
+        const [updatedRide] = await prisma.$transaction([
             prisma.ride.update({
                 where: { id: Number(rideId) },
                 data: {
                     captainId: captainId,
                     status: "ACCEPTED"
                 },
-                include: {
+                select: {
+                    id: true,
+                    riderId: true,
                     captain: {
                         select: {
                             fullName: true,
@@ -176,7 +178,12 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
                             lastLat: true,
                             lastLng: true
                         }
-                    }
+                    },
+                    fare: true,
+                    status: true,
+                    otp: true,
+                    pickupAddress: true,
+                    dropoffAddress: true
                 }
             }),
             prisma.user.update({
@@ -201,7 +208,14 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
 
         res.status(200).json({ 
             message: "Ride accepted successfully",
-            ride: updatedRide
+            ride: {
+                rideId: updatedRide.id,
+                riderId: updatedRide.riderId,
+                fare: updatedRide.fare,
+                status: updatedRide.status,
+                pickupAddress: updatedRide.pickupAddress,
+                dropoffAddress: updatedRide.dropoffAddress
+            }
         });
     } catch (error) {
         console.error("Error accepting ride:", error);
@@ -325,10 +339,20 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: `Cannot complete ride in ${ride.status} status.` });
         }
 
-        const [completedRide, updatedCaptain] = await prisma.$transaction([
+        const logs = await prisma.rideLocationLog.findMany({
+            where: { rideId: Number(rideId) },
+            orderBy: { timestamp: 'asc' }
+        });
+
+        const totalDistance = calculateTotalPathDistance(logs.map(log => ({ lat: log.latitude, lng: log.longitude })));
+        const durationInMinutes = (new Date().getTime() - (ride.startedAt?.getTime() || 0)) / (1000 * 60);
+
+        const finalFare = calculateRideFare(totalDistance, durationInMinutes, ride?.vehicleType as 'CAR' | 'BIKE' | 'AUTO');
+
+        const [completedRide ] = await prisma.$transaction([
             prisma.ride.update({
                 where: { id: Number(rideId) },
-                data: { status: "COMPLETED", completedAt: new Date() },
+                data: { status: "COMPLETED", completedAt: new Date(), fare: parseFloat(finalFare.toFixed(2)) },
             }),
             prisma.user.update({
                 where: { id: captainId },
@@ -340,6 +364,8 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             rideId: completedRide.id,
             status: completedRide.status,
             fare: completedRide.fare,
+            distance: parseFloat(totalDistance.toFixed(2)),
+            duration: parseFloat(durationInMinutes.toFixed(2)),
             message: "Thank you for riding with us!"
         });
 
