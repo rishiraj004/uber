@@ -2,6 +2,7 @@ import { Socket, Server as SocketServer } from "socket.io";
 import { Server as HttpServer } from "http";
 import prisma from "./prisma";
 import jwt from "jsonwebtoken";
+import redis from "./redis";
 
 let io: SocketServer;
 
@@ -49,8 +50,10 @@ export const initSocket = (httpServer: HttpServer) => {
         socket.on("CAPTAIN_LOCATION_UPDATE", async (data: { location: { latitude: number; longitude: number }}) => {
             const { location } = data;
             const userId = socket.user?.userId;
-            if (!userId) return;
+            if (!userId || socket.user?.role !== 'CAPTAIN') return;
             try {
+                await redis.geoadd("captain_locations", location.longitude, location.latitude, String(userId));
+                
                 await prisma.user.update({
                     where: { id: userId },
                     data: {
