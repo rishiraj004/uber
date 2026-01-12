@@ -7,6 +7,7 @@ import redis from "./redis";
 let io: SocketServer;
 
 const userSocketMap: Map<number, string> = new Map<number, string>();
+const lastDbSaveMap: Map<number, number> = new Map<number, number>();
 
 interface AuthenicatedSocket extends Socket {
     user?: {
@@ -53,23 +54,11 @@ export const initSocket = (httpServer: HttpServer) => {
             if (!userId || socket.user?.role !== 'CAPTAIN') return;
             try {
                 await redis.geoadd("captain_locations", location.longitude, location.latitude, String(userId));
-                
-                await prisma.user.update({
-                    where: { id: userId },
-                    data: {
-                        lastLat: location.latitude,
-                        lastLng: location.longitude
-                    }
-                });
 
                 const activeRide = await prisma.ride.findFirst({
                     where: {
                         captainId: userId,
                         status: { in: ["ACCEPTED", "ARRIVED", "ONGOING"] }
-                    },
-                    select: {
-                        id: true,
-                        riderId: true
                     }
                 });
 
@@ -79,6 +68,22 @@ export const initSocket = (httpServer: HttpServer) => {
                         latitude: location.latitude,
                         longitude: location.longitude
                     });
+
+                    if(activeRide.status === "ONGOING") {
+                        const lastSaved = lastDbSaveMap.get(userId) || 0;
+                        const now = Date.now();
+                        if (now - lastSaved > 10000) {
+                            await prisma.rideLocationLog.create({
+                                data: {
+                                    rideId: activeRide.id,
+                                    latitude: location.latitude,
+                                    longitude: location.longitude,
+                                    timestamp: new Date()
+                                }
+                            });
+                            lastDbSaveMap.set(userId, now);
+                        }
+                    }
                 }
             } catch (error) {
                 console.error("Error updating captain location:", error);

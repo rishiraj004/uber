@@ -46,7 +46,7 @@ const CaptainTracking = () => {
         (error) => {
           console.error("Error getting location:", error);
         },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 5000 }
       );
     };
 
