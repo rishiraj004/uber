@@ -33,6 +33,17 @@ enum VehicleType {
   AUTO
 }
 
+model RideLocationLog {
+  id        Int      @id @default(autoincrement())
+  ride      Ride     @relation(fields: [rideId], references: [id])
+  rideId    Int
+
+  latitude  Float
+  longitude Float
+
+  timestamp DateTime @default(now())
+}
+
 model Ride {
   id             Int        @id @default(autoincrement())
 
@@ -49,6 +60,8 @@ model Ride {
   
   captain       User?      @relation("CaptainRides", fields: [captainId], references: [id])
   captainId     Int?
+
+  locationLogs  RideLocationLog[]
   
   status        RideStatus @default(PENDING)
 
