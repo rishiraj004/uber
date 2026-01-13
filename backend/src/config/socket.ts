@@ -51,15 +51,21 @@ export const initSocket = (httpServer: HttpServer) => {
         socket.on("CAPTAIN_LOCATION_UPDATE", async (data: { location: { latitude: number; longitude: number }}) => {
             const { location } = data;
             const userId = socket.user?.userId;
-            if (!userId || socket.user?.role !== 'CAPTAIN') return;
+            const role = socket.user?.role;
+            if (!userId || role !== 'CAPTAIN') return;
             try {
                 await redis.geoadd("captain_locations", location.longitude, location.latitude, String(userId));
 
+                const updatedUser = await prisma.user.update({
+                    where: { id: userId, isOnline: true },
+                    data: { lastLat: location.latitude, lastLng: location.longitude }
+                });
                 const activeRide = await prisma.ride.findFirst({
                     where: {
                         captainId: userId,
                         status: { in: ["ACCEPTED", "ARRIVED", "ONGOING"] }
-                    }
+                    },
+                    select: { id: true, riderId: true, status: true }
                 });
 
                 if (activeRide) {
@@ -90,8 +96,13 @@ export const initSocket = (httpServer: HttpServer) => {
             }
         });
 
-        socket.on("disconnect", () => {
+        socket.on("disconnect", async () => {
             if(userId) {
+                if(socket.user?.role === 'CAPTAIN') {
+                    await redis.zrem('captain_locations', userId.toString()).catch(err => {
+                        console.error(`Error removing captain ${userId} from online_captains:`, err);
+                    });
+                }
                 userSocketMap.delete(userId);
                 console.log(`User ${userId} disconnected`);
             }

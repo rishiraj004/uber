@@ -22,6 +22,19 @@ const CaptainDashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const fetchCaptainStatus = async () => {
+      try {
+        const response = await api.get('/captain/status');
+        console.log("Captain status:", response.data.isOnline);
+        setIsOnline(response.data.isOnline || false);
+      } catch (error) {
+        console.error("Error fetching captain status", error);
+      }
+    };
+    fetchCaptainStatus();
+  },[]);
+
+  useEffect(() => {
     const checkActiveRide = async () => {
       try {
         const token = localStorage.getItem("token");
@@ -29,7 +42,6 @@ const CaptainDashboard = () => {
         if (!token) return;
         const userId = JSON.parse(atob(token.split('.')[1])).userId;
         const response = await api.get(`/ride/details/${userId}`);
-
         if (response.data.ride && (response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
           navigate("/captain-tracking", { state: { ride: response.data.ride } });
         }

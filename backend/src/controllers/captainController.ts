@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import prisma from "../config/prisma";
 import { findNearbyCaptains } from "../services/mapService";
+import redis from "../config/redis";
 
 export const toggleAvailability = async ( req : AuthRequest , res : Response ) => {
     try {
@@ -16,9 +17,16 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
 
         const updatedCaptain = await prisma.user.update({
             where: { id: captainId },
-            data: { isOnline: !captain.isOnline },
+            data: { 
+                isOnline: !captain.isOnline,
+                isAvailable: !captain.isOnline ? true : false 
+            },
             select: { id:true, isOnline: true, fullName:true }
         });
+
+        if(!updatedCaptain.isOnline) {
+            await redis.zrem('captain_locations', updatedCaptain.id.toString());
+        }
 
         res.status(200).json({
             message: `Captain is now ${updatedCaptain.isOnline ? "online" : "offline"}.`,
@@ -88,5 +96,21 @@ export const getNearbyCaptains = async ( req : AuthRequest , res : Response ) =>
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Error fetching nearby captains" });
+    }
+};
+
+export const getCaptainStatus = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const captainId = req.user?.userId;
+        if (!captainId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const captain = await prisma.user.findUnique({ where: { id: captainId } , select: { isOnline: true } });
+        if (!captain) {
+            return res.status(404).json({ message: "Captain not found" });
+        }
+        res.status(200).json({ isOnline: captain.isOnline });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching captain status" });
     }
 };
