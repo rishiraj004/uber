@@ -1,6 +1,6 @@
 import { signup, login, getProfile } from "./authController";
-import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide } from "./rideController";
-
+import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide, getRidePath, getRideDetails } from "./rideController";
+import { getCaptainStatus, toggleAvailability, getNearbyCaptains, updateLocation } from "./captainController";
 export {
     signup,
     login,
@@ -10,5 +10,11 @@ export {
     startRide,
     completeRide,
     calculateFare,
-    cancelRide
+    cancelRide,
+    getRidePath,
+    getRideDetails,
+    getCaptainStatus,
+    toggleAvailability,
+    getNearbyCaptains,
+    updateLocation
 };

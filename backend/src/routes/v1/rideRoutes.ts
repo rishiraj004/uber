@@ -1,7 +1,7 @@
 import { authorizeRole } from "../../middlewares/roleMiddlewares";
 import { authenticate } from "../../middlewares/authMiddelwares";
 import { Router } from "express";
-import { calculateFare, getRideDetails, createRide, acceptRide, arrivedAtPickup, startRide, completeRide, cancelRide } from "../../controllers/rideController";
+import { calculateFare, getRideDetails, createRide, acceptRide, arrivedAtPickup, startRide, completeRide, cancelRide, getRidePath } from "../../controllers/rideController";
 
 const router = Router();
 
@@ -15,4 +15,5 @@ router.post("/start-ride", authenticate, authorizeRole("CAPTAIN"), startRide);
 router.post("/complete-ride", authenticate, authorizeRole("CAPTAIN"), completeRide);
 router.post("/cancel-ride", authenticate, cancelRide);
 
+router.get("/path/:rideId", authenticate, getRidePath);
 export default router;

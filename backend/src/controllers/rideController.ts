@@ -437,3 +437,30 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+export const getRidePath = async ( req : AuthRequest , res : Response ) => {
+    try {
+        const { rideId } = req.params;
+        if(!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+        const logs = await prisma.rideLocationLog.findMany({
+            where: { rideId: Number(rideId) },
+            orderBy: { timestamp: 'asc' },
+            select: {
+                latitude: true,
+                longitude: true,
+                timestamp: true
+            }
+        });
+        let durationInMinutes = calculateTotalTime(logs);
+        res.status(200).json({
+            path: logs.map(log => ({ lat: log.latitude, lng: log.longitude })),
+            duration: parseFloat(durationInMinutes.toFixed(2))
+        });
+    } catch (error) {
+        console.error("Error fetching ride path:", error);
+        res.status(500).json({ message: "Internal server error" }); 
+
+    };
+};
