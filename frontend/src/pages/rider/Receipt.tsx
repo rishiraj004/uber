@@ -5,7 +5,6 @@ const Receipt = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { ride } = location.state || {};
-    console.log(ride);
 
     if (!ride) return <div>No receipt data found.</div>;
 

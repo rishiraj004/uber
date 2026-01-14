@@ -3,7 +3,7 @@ import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import crypto from "crypto";
 import { findNearbyCaptains } from "../services/mapService";
-import { distanceBetweenPoints, calculateTotalPathDistance } from "../utils";
+import { distanceBetweenPoints, calculateTotalPathDistance, calculateTotalTime } from "../utils";
 import { sendNotification } from "../config/socket";
 import { calculateRideFare } from "../services/rideService";
 
@@ -345,7 +345,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
         });
 
         const totalDistance = calculateTotalPathDistance(logs.map(log => ({ lat: log.latitude, lng: log.longitude })));
-        const durationInMinutes = (new Date().getTime() - (ride.startedAt?.getTime() || 0)) / (1000 * 60);
+        const durationInMinutes = calculateTotalTime(logs);
 
         const finalFare = calculateRideFare(totalDistance, durationInMinutes, ride?.vehicleType as 'CAR' | 'BIKE' | 'AUTO');
 
@@ -371,7 +371,9 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
 
         res.status(200).json({ 
             message: "Ride completed successfully",
-            ride: completedRide
+            ride: completedRide,
+            distance: parseFloat(totalDistance.toFixed(2)),
+            duration: parseFloat(durationInMinutes.toFixed(2))
         });
     } catch (error) {
         console.error("Error completing ride:", error);
