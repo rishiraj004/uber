@@ -66,7 +66,7 @@ const RiderTracking = () => {
       RIDE_STARTED: () => { setRideStatus('ONGOING'); },
       RIDE_COMPLETED: () => { 
         setRideStatus('COMPLETED'); 
-        navigate('/receipt', { state: { ride: rideData } }); 
+        navigate('/rider-receipt', { state: { ride: rideData } }); 
       }
     }
     Object.entries(listeners).forEach(([event, handler]) => {
