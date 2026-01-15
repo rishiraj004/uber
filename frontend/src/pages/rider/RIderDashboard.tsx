@@ -26,7 +26,6 @@ const RiderDashboard: React.FC = () => {
           if (!token) return;
           const userId = JSON.parse(atob(token.split('.')[1])).userId;
           const response = await api.get(`/ride/details/${userId}`);
-
           if (response.data.ride && (response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
             navigate("/rider-tracking", { state: { ride: response.data.ride } });
           }
@@ -57,8 +56,8 @@ const RiderDashboard: React.FC = () => {
     }, [pickup, drop]);
 
     const dummyCoords = {
-        pickup: { lat: 23.41, lng: 85.40 },
-        dest: { lat: 25.28, lng: 87.05 }
+        pickup: { lat: 23.41, lng: 85.41 },
+        dest: { lat: 23.28, lng: 85.05 }
     };
 
     const handleEstimateCost = async () => {

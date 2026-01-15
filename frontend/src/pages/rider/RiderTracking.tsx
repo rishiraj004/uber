@@ -7,8 +7,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import { useSocket } from '../../context/socket-context';
+import { RideMap } from '../../components/RideMap';
 
-// --- Sub-component: Ride Status Stepper ---
 const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
   const steps = [
     { label: 'Accepted', status: 'ACCEPTED' },
@@ -54,11 +54,50 @@ const RiderTracking = () => {
   
   const [rideStatus, setRideStatus] = useState(rideData?.status || 'ACCEPTED');
   const [showFareBreakdown, setShowFareBreakdown] = useState(false);
+  
+  // --- ADDED: State to track if the sheet is hidden ---
+  const [isSheetHidden, setIsSheetHidden] = useState(false);
+
+  const [path, setPath] = useState<[number, number][]>([]);
+  const [currentLocation, setCurrentLocation] = useState<[number, number] | undefined>(undefined);
+
+  const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
+  const [dropoffCoords, setDropoffCoords] = useState<[number, number] | null>(null);
+
+  useEffect(() => {
+    const fetchCoords = async () => {
+      const token = localStorage.getItem('token');
+      const userId = token ? JSON.parse(atob(token.split('.')[1])).userId : null;
+      const response = await api.get(`/ride/details/${userId}`);
+      setPickupCoords([response.data.ride.pickupLat, response.data.ride.pickupLng]);
+      setDropoffCoords([response.data.ride.dropoffLat, response.data.ride.dropoffLng]);
+    }    
+    fetchCoords();
+  }, []);
 
   const socket = useSocket();
 
   useEffect(() => {
+    const fetchRidePath = async () => {
+      if (!rideData?.rideId) return;
+      try {
+        const response = await api.get(`/ride/path/${rideData.rideId}`);
+        setPath(response.data.path || []);
+      } catch (error) {
+        console.error("Error fetching ride path:", error);
+      }
+    };
+    fetchRidePath();
+  }, [rideData, rideStatus]);
+
+  useEffect(() => {
     if (!socket) return;
+
+    api.get(`/ride/path/${rideData.rideId}`).then(response => {
+      setPath(response.data.path || []);
+    }).catch(error => {
+      console.error("Error fetching initial ride path:", error);
+    });
 
     const listeners = {
       RIDE_CANCELLED: () => { navigate('/rider-dashboard'); setRideStatus('CANCELLED'); },
@@ -67,6 +106,13 @@ const RiderTracking = () => {
       RIDE_COMPLETED: () => { 
         setRideStatus('COMPLETED'); 
         navigate('/rider-receipt', { state: { ride: rideData } }); 
+      },
+      CAPTAIN_LOCATION_UPDATE: (data: { latitude: number; longitude: number }) => {
+        const newCoords: [number, number] = [data.latitude, data.longitude];
+        setCurrentLocation(newCoords);
+        if (rideStatus === 'ONGOING') {
+          setPath(prevPath => [...prevPath, newCoords]);
+        }
       }
     }
     Object.entries(listeners).forEach(([event, handler]) => {
@@ -76,14 +122,14 @@ const RiderTracking = () => {
     return () => { 
       Object.keys(listeners).forEach(event => { socket.off(event) });
     };
-  }, [rideData, navigate, socket]);
+  }, [rideData, navigate, socket, rideStatus]);
 
   return (
     <div className="h-screen w-screen flex flex-col relative bg-gray-100 overflow-hidden font-sans">
       
       {/* 1. SOS Button (Feature #1) */}
       <button 
-        onClick={() => alert("Emergency alert sent to local authorities and emergency contacts.")} // later will implement actual SOS functionality
+        onClick={() => alert("Emergency alert sent to local authorities and emergency contacts.")}
         className="absolute top-6 right-6 z-50 bg-red-600 text-white p-3 rounded-full shadow-2xl hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center"
         title="Emergency SOS"
         aria-label="Emergency SOS button"
@@ -91,22 +137,41 @@ const RiderTracking = () => {
         <AlertTriangle size={24} />
       </button>
 
-      {/* 2. Map Layout */}
-      <div className="flex-1 bg-slate-300 relative">
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '30px 30px' }}></div>
-        {/* Placeholder for real map markers */}
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-medium">Map Overview</div>
+      {/* 2. Fullscreen Map */}
+      <div className="flex-1 relative bg-slate-300 overflow-hidden">
+        <div className="absolute inset-0 opacity-20 pointer-events-none" 
+        style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '30px 30px' }}>
+        </div>
+        
+        {/* Full Screen Map behind everything */}
+        <div className="absolute inset-0 z-0">
+          {pickupCoords && dropoffCoords && (
+            <RideMap 
+              pickup={pickupCoords} 
+              dropoff={dropoffCoords} 
+              currentLocation={currentLocation}
+              path={path}
+            />
+          )}
+        </div>
+
       </div>
 
       {/* 3. Dynamic Bottom Sheet */}
       <motion.div 
         initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        transition={{ type: "spring", damping: 20, stiffness: 100 }}
-        className="bg-white rounded-t-4xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] p-6 z-10 relative"
+        // --- EDITED: Animate y based on isSheetHidden state ---
+        animate={{ y: isSheetHidden ? "calc(100% - 60px)" : 0 }} 
+        transition={{ type: "spring", damping: 25, stiffness: 120 }}
+        className="absolute left-0 right-0 bottom-0 bg-white rounded-t-4xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] p-6 z-20"
       >
-        {/* Pull Bar */}
-        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
+        {/* --- EDITED: Clickable Pull Bar to toggle sheet --- */}
+        <div 
+          onClick={() => setIsSheetHidden(!isSheetHidden)}
+          className="w-full py-2 -mt-2 mb-4 cursor-pointer group"
+        >
+          <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto group-hover:bg-gray-300 transition-colors" />
+        </div>
 
         <StatusStepper currentStatus={rideStatus} />
 
@@ -156,7 +221,6 @@ const RiderTracking = () => {
               <h3 className="text-2xl font-black text-zinc-900">₹{rideData?.fare || '154'}</h3>
             </div>
 
-            {/* Fare Breakdown Modal Overlay */}
             <AnimatePresence>
               {showFareBreakdown && (
                 <motion.div 
@@ -198,6 +262,7 @@ const RiderTracking = () => {
         </div>
       </motion.div>
     </div>
+
   );
 };
 

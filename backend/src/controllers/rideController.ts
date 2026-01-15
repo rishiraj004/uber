@@ -43,7 +43,17 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
         if(role === "RIDER") {
             ride = await prisma.ride.findFirst({
                 where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] } },
-                include: {
+                select: {
+                    id: true, 
+                    status: true,
+                    pickupAddress: true,
+                    pickupLat: true,
+                    pickupLng: true,
+                    dropoffAddress: true,
+                    dropoffLat: true,
+                    dropoffLng: true,
+                    fare: true,
+                    otp: true,
                     captain: {
                         select: {
                             fullName: true,
@@ -59,13 +69,19 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
         } else if(role === "CAPTAIN") {
             ride = await prisma.ride.findFirst({
                 where: { captainId: Number(userId), status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] } },
-                include: {
+                select: {
                     rider: {
                         select: {
                             fullName: true,
                             rating: true
                         }
-                    }
+                    },
+                    pickupAddress: true,
+                    dropoffAddress: true,
+                    pickupLat: true,
+                    pickupLng: true,
+                    dropoffLat: true,
+                    dropoffLng: true
                 },
                 orderBy: { createdAt: 'desc' }
             });

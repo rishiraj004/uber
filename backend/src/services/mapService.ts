@@ -10,10 +10,11 @@ export const findNearbyCaptains = async ( riderLat: number , riderLng : number ,
             radiusKm,
             "km"
         );
+        console.log("Nearby captain IDs from Redis:", nearbyCaptainIDs);
 
         if (!nearbyCaptainIDs || nearbyCaptainIDs.length === 0) return [];
 
-        return await prisma.user.findMany({
+        const response= await prisma.user.findMany({
             where: {
                 id: { in: nearbyCaptainIDs.map(id => Number(id)) },
                 isOnline: true,
@@ -28,6 +29,8 @@ export const findNearbyCaptains = async ( riderLat: number , riderLng : number ,
                 rating: true
             }
         });
+        console.log("Nearby captains found:", response);
+        return response;
     } catch (error) {
         console.error("Error finding nearby captains:", error);
         return [];

@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle, MapPin, Ruler, CreditCard, Clock } from 'lucide-react';
+import { CheckCircle, Ruler, Clock } from 'lucide-react';
 
 const Receipt = () => {
     const location = useLocation();
