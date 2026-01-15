@@ -43,6 +43,7 @@ const CaptainDashboard = () => {
         const userId = JSON.parse(atob(token.split('.')[1])).userId;
         const response = await api.get(`/ride/details/${userId}`);
         if (response.data.ride && (response.data.ride.status === 'ACCEPTED' || response.data.ride.status === 'ARRIVED' || response.data.ride.status === 'ONGOING')) {
+          console.log("Active ride found:", response.data.ride);
           navigate("/captain-tracking", { state: { ride: response.data.ride } });
         }
       } catch (err) {
@@ -123,10 +124,11 @@ const CaptainDashboard = () => {
   // 3. Accept Ride Logic (POST /accept-ride)
   const acceptRide = async (rideId: number) => {
     try {
-      const response = await api.post('/ride/accept-ride', { rideId });
-      console.log(response.data);
-      console.log(currentRideRequest);
-      navigate('/captain-tracking', { state: { ride: currentRideRequest } });
+      await api.post('/ride/accept-ride', { rideId });
+      const userId = JSON.parse(atob(localStorage.getItem("token")!.split('.')[1])).userId;
+      const RideResponse = await api.get(`/ride/details/${userId}`);
+      console.log("Ride accepted:", RideResponse.data);
+      navigate('/captain-tracking', { state: { ride: RideResponse.data.ride } });
       setCurrentRideRequest(null);
     } catch (error) {
       console.error("Error accepting ride", error);

@@ -137,9 +137,11 @@ const RiderTracking = () => {
         <AlertTriangle size={24} />
       </button>
 
+      {/* absolute inset-0 z-0 - full */}
+
       {/* 2. Fullscreen Map */}
-      <div className="flex-1 relative bg-slate-300 overflow-hidden">
-        <div className="absolute inset-0 opacity-20 pointer-events-none" 
+      <div className='absolute inset-0 z-0 bg-slate-300 transition-all duration-300'>
+        <div className="absolute inset-0 opacity-20 pointer-events-none z-10" 
         style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '30px 30px' }}>
         </div>
         
@@ -154,7 +156,6 @@ const RiderTracking = () => {
             />
           )}
         </div>
-
       </div>
 
       {/* 3. Dynamic Bottom Sheet */}

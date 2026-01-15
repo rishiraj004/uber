@@ -141,13 +141,13 @@ const RiderDashboard: React.FC = () => {
     };
 
     const cancelRide = async () => {
-        setLoading(false);
-        console.log("Cancelling ride with ID:", rideId);
-        if (!rideId) {
-            setError("No ride to cancel.");
-            return;
-        }
-        await api.post("/ride/cancel-ride", {rideId});
+      setLoading(false);
+      console.log("Cancelling ride with ID:", rideId);
+      if (!rideId) {
+          setError("No ride to cancel.");
+          return;
+      }
+      await api.post("/ride/cancel-ride", {rideId});
     }
 
     return (
