@@ -29,7 +29,7 @@ const Receipt = () => {
             }
         };
         fetchRideDetails();
-    }, []);
+    }, [ride]);
     if (!ride) return <div>No receipt data found.</div>;
 
     return (
