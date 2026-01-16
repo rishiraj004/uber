@@ -65,7 +65,11 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                                 select: {
                                     fullName: true
                                 }
-                            }
+                            },
+                            vehicleNumber: true,
+                            vehicleModel: true,
+                            vehicleColor: true,
+                            vehicleType: true
                         }
                     }
                 },
@@ -74,14 +78,28 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
             // Flatten captain data for response
             if (ride && ride.captain) {
                 ride = {
-                    ...ride,
-                    captain: {
-                        fullName: ride.captain.user.fullName,
-                        rating: ride.captain.rating,
-                        lastLat: ride.captain.lastLat,
-                        lastLng: ride.captain.lastLng,
-                        isOnline: ride.captain.isOnline
-                    }
+                    rideId: ride.id,
+                    status: ride.status,
+                    pickupAddress: ride.pickupAddress,
+                    pickupLat: ride.pickupLat,
+                    pickupLng: ride.pickupLng,
+                    dropoffAddress: ride.dropoffAddress,
+                    dropoffLat: ride.dropoffLat,
+                    dropoffLng: ride.dropoffLng,
+                    fare: ride.fare,
+                    otp: ride.otp,
+                    rating: ride.captain.rating,
+                    captainName: ride.captain.user.fullName,
+                    captainRating: ride.captain.rating,
+                    captainLocation: {
+                        lat: ride.captain.lastLat,
+                        lng: ride.captain.lastLng
+                    },
+                    captainIsOnline: ride.captain.isOnline,
+                    vehicleNumber: ride.captain.vehicleNumber,
+                    vehicleModel: ride.captain.vehicleModel,
+                    vehicleColor: ride.captain.vehicleColor,
+                    vehicleType: ride.captain.vehicleType
                 };
             }
         } else if(role === "CAPTAIN") {
@@ -92,7 +110,7 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
             });
             
             if (captainProfile) {
-                ride = await prisma.ride.findFirst({
+                const rideData = await prisma.ride.findFirst({
                     where: { captainId: captainProfile.id, status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] } },
                     select: {
                         id: true,
@@ -113,6 +131,23 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                     },
                     orderBy: { createdAt: 'desc' }
                 });
+                
+                // Flatten rider data for response
+                if (rideData) {
+                    ride = {
+                        rideId: rideData.id,
+                        status: rideData.status,
+                        riderName: rideData.rider.fullName,
+                        pickupAddress: rideData.pickupAddress,
+                        dropoffAddress: rideData.dropoffAddress,
+                        pickupLat: rideData.pickupLat,
+                        pickupLng: rideData.pickupLng,
+                        dropoffLat: rideData.dropoffLat,
+                        dropoffLng: rideData.dropoffLng,
+                        fare: rideData.fare,
+                        otp: rideData.otp
+                    };
+                }
             }
         }
         res.status(200).json({ ride });
@@ -160,19 +195,26 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
 
         const nearbyCaptains = await findNearbyCaptains(pickupCoords.lat, pickupCoords.lng, 5);
 
-        nearbyCaptains.forEach(captain => {
-            sendNotification(
-                captain.id, 
-                "NEW_RIDE_REQUEST",
-                { 
-                    rideId: newRide.id,
-                    pickupAddress: newRide.pickupAddress,
-                    dropoffAddress: newRide.dropoffAddress,
-                    fare: newRide.fare,
-                    riderName: riderName
-                }
-            );
-        });
+        // Send notifications to nearby captains using their userId (not captainProfile.id)
+        for (const captain of nearbyCaptains) {
+            const captainData = await prisma.captainProfile.findUnique({
+                where: { id: captain.id },
+                select: { userId: true }
+            });
+            if (captainData) {
+                sendNotification(
+                    captainData.userId, 
+                    "NEW_RIDE_REQUEST",
+                    { 
+                        rideId: newRide.id,
+                        pickupAddress: newRide.pickupAddress,
+                        dropoffAddress: newRide.dropoffAddress,
+                        fare: newRide.fare,
+                        riderName: riderName
+                    }
+                );
+            }
+        }
 
         res.status(201).json({ 
             message: "Ride created successfully",

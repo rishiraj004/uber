@@ -43,7 +43,7 @@ const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
   );
 };
 
-const RideCancelled = async (rideId: string) => {
+const RideCancelled = async (rideId: number) => {
   await api.post('/ride/cancel-ride', { rideId });
 }
 
@@ -64,6 +64,8 @@ const RiderTracking = () => {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [dropoffCoords, setDropoffCoords] = useState<[number, number] | null>(null);
 
+  const [rideDetails, setRideDetails] = useState<any>(null);
+  
   useEffect(() => {
     const fetchCoords = async () => {
       const token = localStorage.getItem('token');
@@ -79,21 +81,39 @@ const RiderTracking = () => {
 
   useEffect(() => {
     const fetchRidePath = async () => {
-      if (!rideData?.rideId) return;
+      const rideId = rideData?.rideId || rideData?.id;
+      if (!rideId) return;
       try {
-        const response = await api.get(`/ride/path/${rideData.rideId}`);
+        const response = await api.get(`/ride/path/${rideId}`);
         setPath(response.data.path || []);
       } catch (error) {
         console.error("Error fetching ride path:", error);
       }
     };
+
+    const fetchRideDetails = async () => {
+      const token = localStorage.getItem('token');
+      const userId = token ? JSON.parse(atob(token.split('.')[1])).userId : null;
+      const rideId = rideData?.rideId || rideData?.id;
+      if (!rideId || !userId) return;
+      try {
+        const response = await api.get(`/ride/details/${userId}`);
+        setRideStatus(response.data.ride.status);
+        setRideDetails(response.data.ride);
+        console.log("Fetched ride details:", response.data.ride);
+      } catch (error) {
+        console.error("Error fetching ride details:", error);
+      }
+    };
+    fetchRideDetails();
     fetchRidePath();
   }, [rideData, rideStatus]);
 
   useEffect(() => {
     if (!socket) return;
 
-    api.get(`/ride/path/${rideData.rideId}`).then(response => {
+    const rideId = rideData?.rideId || rideData?.id;
+    api.get(`/ride/path/${rideId}`).then(response => {
       setPath(response.data.path || []);
     }).catch(error => {
       console.error("Error fetching initial ride path:", error);
@@ -180,7 +200,7 @@ const RiderTracking = () => {
         <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mb-6 flex items-start gap-3">
           <ShieldCheck size={20} className="text-blue-600 shrink-0" />
           <p className="text-[11px] text-blue-800 leading-tight">
-            <span className="font-bold">Safety Check:</span> Verify that the vehicle plate <span className="underline font-black">BR-01-1234</span> matches the car arriving. Do not enter if it doesn't match.
+            <span className="font-bold">Safety Check:</span> Verify that the vehicle plate <span className="underline font-black">{rideDetails?.vehicleNumber || 'BR-01-1234'}</span> matches the car arriving. Do not enter if it doesn't match.
           </p>
         </div>
 
@@ -192,12 +212,12 @@ const RiderTracking = () => {
                 <img src="https://via.placeholder.com/150" alt="Captain" className="w-full h-full object-cover" />
               </div>
               <div className="absolute -bottom-2 -right-2 bg-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded border-2 border-white">
-                4.8 ★
+                {rideDetails?.rating || '4.8'} ★
               </div>
             </div>
             <div>
-              <p className="font-bold text-xl">{rideData?.captainName || 'Aman Gupta'}</p>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">White Maruti Swift</p>
+              <p className="font-bold text-xl">{rideDetails?.captainName || 'Aman Gupta'}</p>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{`${rideDetails?.vehicleColor || 'White'} ${rideDetails?.vehicleModel || 'Maruti Swift'}`}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -217,7 +237,6 @@ const RiderTracking = () => {
             <div className="bg-white border-2 border-gray-100 p-5 rounded-3xl flex flex-col items-center justify-center h-full">
               <div className="flex items-center gap-1 mb-1">
                 <p className="text-[9px] uppercase text-gray-400 tracking-[0.2em] font-black">Fare</p>
-                <button onClick={() => setShowFareBreakdown(true)} title="View fare breakdown" aria-label="View fare breakdown"><Info size={12} className="text-gray-300 hover:text-gray-500" /></button>
               </div>
               <h3 className="text-2xl font-black text-zinc-900">₹{rideData?.fare || '154'}</h3>
             </div>
@@ -254,12 +273,12 @@ const RiderTracking = () => {
         {/* Footer Actions */}
         <div className="flex items-center justify-between border-t border-gray-100 pt-6">
            <button 
-             onClick={() => RideCancelled(rideData?.rideId)}
+             onClick={() => RideCancelled(rideData?.rideId || rideData?.id)}
              className="flex items-center gap-2 text-red-600 font-bold text-sm hover:opacity-70 transition-opacity"
            >
              <XCircle size={18} /> Cancel Ride
            </button>
-           <p className="text-[9px] font-black text-gray-300 tracking-widest uppercase">ID: #{rideData?.rideId || '48291'}</p>
+           <p className="text-[9px] font-black text-gray-300 tracking-widest uppercase">ID: #{rideData?.rideId || rideData?.id || '48291'}</p>
         </div>
       </motion.div>
     </div>

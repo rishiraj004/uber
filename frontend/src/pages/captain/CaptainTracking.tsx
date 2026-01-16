@@ -34,14 +34,15 @@ const CaptainTracking = () => {
   useEffect(() => {
     const fetchPathHistory = async () => {
         try {
-            const response = await api.get(`/ride/path/${initialRide.rideId}`);
+            const rideId = initialRide.rideId || initialRide.id;
+            const response = await api.get(`/ride/path/${rideId}`);
             setPath(response.data.path || []);
         } catch (err) {
             console.error("Error fetching path history:", err);
         }
     };
-    if (initialRide?.rideId) fetchPathHistory();
-  }, [initialRide?.rideId]);
+    if (initialRide?.rideId || initialRide?.id) fetchPathHistory();
+  }, [initialRide?.rideId, initialRide?.id]);
 
   // 2. Local Tracking and Socket Emission
   useEffect(() => {
@@ -74,21 +75,23 @@ const CaptainTracking = () => {
   // 3. Handle Ride Cancellation
   useEffect(() => {
     if (!socket) return;
+    const rideId = initialRide.rideId || initialRide.id;
     const handleRideCancellation = (data: { rideId: number }) => {
-      if (data.rideId === initialRide.rideId) {
+      if (data.rideId === rideId) {
         toast('Ride Cancelled by Rider');
         navigate('/captain-dashboard');
       }
     }
     socket.on("RIDE_CANCELLED", handleRideCancellation);
     return () => { socket.off("RIDE_CANCELLED", handleRideCancellation); };
-  }, [initialRide.rideId, navigate, socket]);
+  }, [initialRide.rideId, initialRide.id, navigate, socket]);
 
   // ... (handleArrived, handleStartTrip, handleCompleteTrip logic remains the same)
 
   const handleArrived = async () => {
     try {
-      await api.post('/ride/arrived-at-pickup', { rideId: initialRide.rideId });
+      const rideId = initialRide.rideId || initialRide.id;
+      await api.post('/ride/arrived-at-pickup', { rideId });
       setRideStatus('ARRIVED');
     } catch (err) {
       toast.error("Error updating status to ARRIVED");
@@ -99,7 +102,8 @@ const CaptainTracking = () => {
     if (otp.length !== 4) return alert("Enter 4-digit OTP");
     setLoading(true);
     try {
-      await api.post('/ride/start-ride', { rideId: initialRide.rideId, otp });
+      const rideId = initialRide.rideId || initialRide.id;
+      await api.post('/ride/start-ride', { rideId, otp });
       setRideStatus('ONGOING');
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Error starting trip");
@@ -111,7 +115,8 @@ const CaptainTracking = () => {
   const handleCompleteTrip = async () => {
     setLoading(true);
     try {
-      await api.post('/ride/complete-ride', { rideId: initialRide.rideId });
+      const rideId = initialRide.rideId || initialRide.id;
+      await api.post('/ride/complete-ride', { rideId });
       navigate('/captain-dashboard');
     } catch (err) {
       toast.error("Error completing trip");

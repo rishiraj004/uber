@@ -24,9 +24,16 @@ const SignupPage: React.FC = () => {
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>("RIDER");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Captain-specific fields
+  const [vehicleNumber, setVehicleNumber] = useState("");
+  const [vehicleModel, setVehicleModel] = useState("");
+  const [vehicleColor, setVehicleColor] = useState("");
+  const [vehicleType, setVehicleType] = useState<"CAR" | "BIKE" | "AUTO">("CAR");
 
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -35,10 +42,12 @@ const SignupPage: React.FC = () => {
   const canSubmit = useMemo(() => {
     if (!fullName.trim()) return false;
     if (!emailLooksValid(email)) return false;
+    if (!phone.trim() || phone.length < 10) return false;
     if (password.length < 6) return false;
     if (password !== confirmPassword) return false;
+    if (role === "CAPTAIN" && (!vehicleNumber.trim() || !vehicleModel.trim() || !vehicleColor.trim())) return false;
     return true;
-  }, [fullName, email, password, confirmPassword]);
+  }, [fullName, email, phone, password, confirmPassword, role, vehicleNumber, vehicleModel, vehicleColor]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,12 +61,36 @@ const SignupPage: React.FC = () => {
     try {
       setSubmitting(true);
 
-      const response = await api.post("/auth/signup", {
+      const payload: {
+        email: string;
+        password: string;
+        fullName: string;
+        phone: string;
+        role: Role;
+        vehicleDetails?: {
+          number: string;
+          model: string;
+          color: string;
+          type: "CAR" | "BIKE" | "AUTO";
+        };
+      } = {
         email: email.trim().toLowerCase(),
         password,
         fullName: fullName.trim(),
+        phone: phone.trim(),
         role,
-      });
+      };
+
+      if (role === "CAPTAIN") {
+        payload.vehicleDetails = {
+          number: vehicleNumber.trim(),
+          model: vehicleModel.trim(),
+          color: vehicleColor.trim(),
+          type: vehicleType,
+        };
+      }
+
+      const response = await api.post("/auth/signup", payload);
 
       const token: string | undefined = response.data?.token;
       const userRole: Role | undefined = response.data?.user?.role;
@@ -129,6 +162,25 @@ const SignupPage: React.FC = () => {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-zinc-200 mb-1">Phone Number</label>
+            <input
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                setError("");
+              }}
+              className="w-full rounded-lg bg-zinc-950/60 border border-zinc-800 px-3 py-2 outline-none focus:border-zinc-500"
+              placeholder="+91 9876543210"
+              type="tel"
+              autoComplete="tel"
+              required
+            />
+            {phone.length > 0 && phone.length < 10 ? (
+              <p className="mt-1 text-xs text-red-300">Enter a valid phone number.</p>
+            ) : null}
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-zinc-200 mb-2">Account type</label>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -157,6 +209,67 @@ const SignupPage: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Captain Vehicle Details */}
+          {role === "CAPTAIN" && (
+            <div className="space-y-4 p-4 rounded-lg bg-zinc-950/40 border border-zinc-800">
+              <p className="text-sm font-medium text-zinc-300">Vehicle Details</p>
+              
+              <div>
+                <label className="block text-sm font-medium text-zinc-200 mb-1">Vehicle Number</label>
+                <input
+                  value={vehicleNumber}
+                  onChange={(e) => setVehicleNumber(e.target.value)}
+                  className="w-full rounded-lg bg-zinc-950/60 border border-zinc-800 px-3 py-2 outline-none focus:border-zinc-500"
+                  placeholder="BR-01-1234"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-zinc-200 mb-1">Vehicle Model</label>
+                <input
+                  value={vehicleModel}
+                  onChange={(e) => setVehicleModel(e.target.value)}
+                  className="w-full rounded-lg bg-zinc-950/60 border border-zinc-800 px-3 py-2 outline-none focus:border-zinc-500"
+                  placeholder="Maruti Swift"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-zinc-200 mb-1">Vehicle Color</label>
+                <input
+                  value={vehicleColor}
+                  onChange={(e) => setVehicleColor(e.target.value)}
+                  className="w-full rounded-lg bg-zinc-950/60 border border-zinc-800 px-3 py-2 outline-none focus:border-zinc-500"
+                  placeholder="White"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-zinc-200 mb-2">Vehicle Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["CAR", "BIKE", "AUTO"] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setVehicleType(type)}
+                      className={[
+                        "rounded-lg border px-3 py-2 text-sm font-semibold",
+                        vehicleType === type
+                          ? "border-zinc-200 bg-zinc-200 text-zinc-950"
+                          : "border-zinc-800 bg-zinc-950/40 text-zinc-200 hover:border-zinc-600",
+                      ].join(" ")}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-zinc-200 mb-1">Password</label>
