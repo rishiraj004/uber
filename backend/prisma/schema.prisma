@@ -58,7 +58,7 @@ model Ride {
   rider         User       @relation("RiderRides", fields: [riderId], references: [id])
   riderId       Int
   
-  captain       User?      @relation("CaptainRides", fields: [captainId], references: [id])
+  captain       CaptainProfile?      @relation("CaptainRides", fields: [captainId], references: [id])
   captainId     Int?
 
   locationLogs  RideLocationLog[]
@@ -83,18 +83,66 @@ model User {
   email     String   @unique
   password  String?
   fullName  String
+  phone     String   @unique
   role      Role     @default(RIDER)
 
-  //For captains only
-  isOnline    Boolean  @default(false)
-  isAvailable Boolean  @default(true)
-  lastLat     Float?
-  lastLng     Float?
-  rating      Float?   @default(0)
+  //Relations
+  riderProfile   RiderProfile?
+  captainProfile CaptainProfile?
   
   ridesAsRider   Ride[]   @relation("RiderRides")
-  ridesAsCaptain Ride[]   @relation("CaptainRides")
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RiderProfile {
+  id        Int    @id @default(autoincrement())
+  user      User   @relation(fields: [userId], references: [id])
+  userId    Int    @unique
+
+  homeAddress String?
+  workAddress String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CaptainProfile {
+  id            Int      @id @default(autoincrement())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        Int      @unique
+
+  vehicleType   VehicleType
+  vehicleNumber String
+  vehicleModel  String
+  vehicleColor  String
+
+  isAvailable   Boolean  @default(true)
+  isOnline      Boolean  @default(false)
+
+  lastLat     Float?
+  lastLng     Float?
+
+  rating      Float    @default(5.0)
+  totalRides  Int      @default(0)
+  totalEarnings Float   @default(0.0)
+
+  ridesGiven Ride[]   @relation("CaptainRides")
+  shifts     Shift[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Shift {
+  id          Int      @id @default(autoincrement())
+  captain     CaptainProfile @relation(fields: [captainId], references: [id])
+  captainId   Int
+
+  startTime   DateTime
+  endTime     DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
