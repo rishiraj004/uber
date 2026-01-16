@@ -13,9 +13,16 @@ interface RideRequest {
   dropoffAddress: string;
 }
 
+interface Analytics {
+  totalEarnings: number;
+  totalTrips: number;
+  totalOnlineHours: number;
+}
+
 const CaptainDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [currentRideRequest, setCurrentRideRequest] = useState<RideRequest | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics>({ totalEarnings: 0, totalTrips: 0, totalOnlineHours: 0 });
   
   const watchId = useRef<number | null>(null);
   const socket = useSocket();
@@ -27,6 +34,13 @@ const CaptainDashboard = () => {
         const response = await api.get('/captain/status');
         console.log("Captain status:", response.data.isOnline);
         setIsOnline(response.data.isOnline || false);
+        
+        const analyticsResponse = await api.get('/captain/analytics');
+        setAnalytics({
+          totalEarnings: analyticsResponse.data.totalEarnings || 0,
+          totalTrips: analyticsResponse.data.totalTrips || 0,
+          totalOnlineHours: analyticsResponse.data.totalOnlineHours || 0
+        });
       } catch (error) {
         console.error("Error fetching captain status", error);
       }
@@ -116,6 +130,8 @@ const CaptainDashboard = () => {
     try {
       const response = await api.patch('/captain/toggle-status');
       setIsOnline(response.data.isOnline);
+      // Refresh analytics after toggling status (to update online hours)
+      fetchAnalytics();
     } catch (error) {
       console.error("Error toggling status", error);
     }
@@ -169,10 +185,10 @@ const CaptainDashboard = () => {
             <p className="text-gray-500 text-sm">Today's Earnings</p>
             <DollarSign size={20} className="text-green-600" />
           </div>
-          <h3 className="text-3xl font-black">₹0.00</h3>
+          <h3 className="text-3xl font-black">₹{analytics.totalEarnings.toFixed(2)}</h3>
           <div className="mt-4 flex gap-4 text-center">
-            <div className="flex-1"><p className="text-xs text-gray-400 uppercase">Trips</p><p className="font-bold">0</p></div>
-            <div className="flex-1"><p className="text-xs text-gray-400 uppercase">Hours</p><p className="font-bold">0.0</p></div>
+            <div className="flex-1"><p className="text-xs text-gray-400 uppercase">Trips</p><p className="font-bold">{analytics.totalTrips}</p></div>
+            <div className="flex-1"><p className="text-xs text-gray-400 uppercase">Hours</p><p className="font-bold">{analytics.totalOnlineHours.toFixed(1)}</p></div>
           </div>
         </div>
 

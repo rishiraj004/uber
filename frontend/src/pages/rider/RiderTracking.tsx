@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Phone, MessageSquare, ShieldCheck, 
-  XCircle, AlertTriangle, Info, CheckCircle2 
+  XCircle, AlertTriangle, CheckCircle2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
@@ -64,7 +64,22 @@ const RiderTracking = () => {
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [dropoffCoords, setDropoffCoords] = useState<[number, number] | null>(null);
 
-  const [rideDetails, setRideDetails] = useState<any>(null);
+  interface RideDetails {
+    vehicleNumber: string;
+    captainName: string;
+    vehicleColor: string;
+    vehicleModel: string;
+    rating: number;
+    status: string;
+    fare: number;
+    pickupLat: number;
+    pickupLng: number;
+    dropoffLat: number;
+    dropoffLng: number;
+    otp: string;
+  }
+  
+  const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
   
   useEffect(() => {
     const fetchCoords = async () => {
