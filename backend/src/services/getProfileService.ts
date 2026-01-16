@@ -7,10 +7,30 @@ export const userData = async (userId: number) => {
             id: true,
             email: true,
             fullName: true,
+            phone: true,
             role: true,
-            isOnline: true,
-            rating: true,
-            createdAt: true
+            createdAt: true,
+            riderProfile: {
+                select: {
+                    id: true,
+                    homeAddress: true,
+                    workAddress: true
+                }
+            },
+            captainProfile: {
+                select: {
+                    id: true,
+                    isOnline: true,
+                    isAvailable: true,
+                    rating: true,
+                    vehicleType: true,
+                    vehicleNumber: true,
+                    vehicleModel: true,
+                    vehicleColor: true,
+                    totalRides: true,
+                    totalEarnings: true
+                }
+            }
         }
     });
 

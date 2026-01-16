@@ -6,22 +6,25 @@ import redis from "../config/redis";
 
 export const toggleAvailability = async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
-        if (!captainId) {
+        const userId = req.user?.userId;
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        const captain = await prisma.user.findUnique({ where: { id: captainId } , select: { isOnline: true } });
-        if (!captain) {
-            return res.status(404).json({ message: "Captain not found" });
+        const captainProfile = await prisma.captainProfile.findUnique({ 
+            where: { userId: userId },
+            select: { id: true, isOnline: true }
+        });
+        if (!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
         }
 
-        const updatedCaptain = await prisma.user.update({
-            where: { id: captainId },
+        const updatedCaptain = await prisma.captainProfile.update({
+            where: { id: captainProfile.id },
             data: { 
-                isOnline: !captain.isOnline,
-                isAvailable: !captain.isOnline ? true : false 
+                isOnline: !captainProfile.isOnline,
+                isAvailable: !captainProfile.isOnline ? true : false 
             },
-            select: { id:true, isOnline: true, fullName:true }
+            select: { id: true, isOnline: true, user: { select: { fullName: true } } }
         });
 
         if(!updatedCaptain.isOnline) {
@@ -39,10 +42,10 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
 
 export const updateLocation = async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
+        const userId = req.user?.userId;
         const { latitude, longitude } = req.body;
 
-        if(!captainId) {
+        if(!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
@@ -50,13 +53,13 @@ export const updateLocation = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: "Latitude and Longitude are required." });
         }
 
-        const updatedCaptain = await prisma.user.update({
-            where: {id:captainId},
+        const updatedCaptain = await prisma.captainProfile.update({
+            where: { userId: userId },
             data: {
                 lastLat: latitude,
                 lastLng: longitude
             },
-            select: { id:true, lastLat:true, lastLng:true, fullName:true, isOnline:true }
+            select: { id: true, lastLat: true, lastLng: true, isOnline: true, user: { select: { fullName: true } } }
         });
 
         res.status(200).json({
@@ -101,15 +104,21 @@ export const getNearbyCaptains = async ( req : AuthRequest , res : Response ) =>
 
 export const getCaptainStatus = async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
-        if (!captainId) {
+        const userId = req.user?.userId;
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        const captain = await prisma.user.findUnique({ where: { id: captainId } , select: { isOnline: true } });
-        if (!captain) {
-            return res.status(404).json({ message: "Captain not found" });
+        const captainProfile = await prisma.captainProfile.findUnique({ 
+            where: { userId: userId },
+            select: { isOnline: true, isAvailable: true }
+        });
+        if (!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
         }
-        res.status(200).json({ isOnline: captain.isOnline });
+        res.status(200).json({ 
+            isOnline: captainProfile.isOnline,
+            isAvailable: captainProfile.isAvailable
+        });
     } catch (error) {
         res.status(500).json({ message: "Error fetching captain status" });
     }

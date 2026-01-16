@@ -5,30 +5,50 @@ import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/authMiddelwares";
 import { userData } from "../services/getProfileService";
 
-export const signup = async ( req : Request , res : Response ) => {
-    try { 
-        const { email, password, fullName, role } = req.body;
+export const signup = async (req: Request, res: Response) => {
+    try {
+        const { email, password, fullName, role , phone, vehicleDetails } = req.body;
 
-        if(!email || !password || !fullName ) {
-            return res.status(400).json({ message: "Email, password and fullname are required." });
+        if (!email || !password || !fullName || !phone || !role || (role === "CAPTAIN" && !vehicleDetails)) {
+            return res.status(400).json({ message: "Missing required fields." });
         }
 
-        const exsistingUser = await prisma.user.findUnique({ where: { email } });
-        if (exsistingUser) {
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
             return res.status(400).json({ message: "User with this email already exists." });
         }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
+        const userRole = role === "CAPTAIN" ? "CAPTAIN" : "RIDER";
 
         const user = await prisma.user.create({
             data: {
                 email,
                 password: hashedPassword,
                 fullName,
-                role: role || "RIDER"
+                phone,
+                role: userRole,
+                ...(userRole === "RIDER" ? {
+                    riderProfile: {
+                        create: {}
+                    }
+                } : {
+                    captainProfile: {
+                        create: {
+                            vehicleNumber: vehicleDetails?.number || "",
+                            vehicleModel: vehicleDetails?.model,
+                            vehicleColor: vehicleDetails?.color,
+                            vehicleType: vehicleDetails?.type || "CAR",
+                        }
+                    }
+                })
+            },
+            include: {
+                riderProfile: true,
+                captainProfile: true
             }
-        })
+        });
 
         const token = jwt.sign(
             { userId: user.id, role: user.role },

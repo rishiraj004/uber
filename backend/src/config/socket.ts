@@ -54,15 +54,25 @@ export const initSocket = (httpServer: HttpServer) => {
             const role = socket.user?.role;
             if (!userId || role !== 'CAPTAIN') return;
             try {
-                await redis.geoadd("captain_locations", location.longitude, location.latitude, String(userId));
+                // Get captain profile id for this user
+                const captainProfile = await prisma.captainProfile.findUnique({
+                    where: { userId: userId },
+                    select: { id: true, isOnline: true }
+                });
 
-                const updatedUser = await prisma.user.update({
-                    where: { id: userId, isOnline: true },
+                if (!captainProfile || !captainProfile.isOnline) return;
+
+                // Store captainProfile.id in Redis (since Ride.captainId references CaptainProfile)
+                await redis.geoadd("captain_locations", location.longitude, location.latitude, String(captainProfile.id));
+
+                await prisma.captainProfile.update({
+                    where: { id: captainProfile.id },
                     data: { lastLat: location.latitude, lastLng: location.longitude }
                 });
+
                 const activeRide = await prisma.ride.findFirst({
                     where: {
-                        captainId: userId,
+                        captainId: captainProfile.id,
                         status: { in: ["ACCEPTED", "ARRIVED", "ONGOING"] }
                     },
                     select: { id: true, riderId: true, status: true }
@@ -99,9 +109,16 @@ export const initSocket = (httpServer: HttpServer) => {
         socket.on("disconnect", async () => {
             if(userId) {
                 if(socket.user?.role === 'CAPTAIN') {
-                    await redis.zrem('captain_locations', userId.toString()).catch(err => {
-                        console.error(`Error removing captain ${userId} from online_captains:`, err);
+                    // Get captain profile id to remove from Redis
+                    const captainProfile = await prisma.captainProfile.findUnique({
+                        where: { userId: userId },
+                        select: { id: true }
                     });
+                    if (captainProfile) {
+                        await redis.zrem('captain_locations', captainProfile.id.toString()).catch(err => {
+                            console.error(`Error removing captain ${captainProfile.id} from captain_locations:`, err);
+                        });
+                    }
                 }
                 userSocketMap.delete(userId);
                 console.log(`User ${userId} disconnected`);

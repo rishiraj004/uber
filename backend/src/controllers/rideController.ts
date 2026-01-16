@@ -56,35 +56,64 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                     otp: true,
                     captain: {
                         select: {
-                            fullName: true,
+                            id: true,
                             rating: true,
                             lastLat: true,
                             lastLng: true,
-                            isOnline: true
+                            isOnline: true,
+                            user: {
+                                select: {
+                                    fullName: true
+                                }
+                            }
                         }
                     }
                 },
                 orderBy: { createdAt: 'desc' }
             });
+            // Flatten captain data for response
+            if (ride && ride.captain) {
+                ride = {
+                    ...ride,
+                    captain: {
+                        fullName: ride.captain.user.fullName,
+                        rating: ride.captain.rating,
+                        lastLat: ride.captain.lastLat,
+                        lastLng: ride.captain.lastLng,
+                        isOnline: ride.captain.isOnline
+                    }
+                };
+            }
         } else if(role === "CAPTAIN") {
-            ride = await prisma.ride.findFirst({
-                where: { captainId: Number(userId), status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] } },
-                select: {
-                    rider: {
-                        select: {
-                            fullName: true,
-                            rating: true
-                        }
-                    },
-                    pickupAddress: true,
-                    dropoffAddress: true,
-                    pickupLat: true,
-                    pickupLng: true,
-                    dropoffLat: true,
-                    dropoffLng: true
-                },
-                orderBy: { createdAt: 'desc' }
+            // For captains, we need to find the captain profile first
+            const captainProfile = await prisma.captainProfile.findUnique({
+                where: { userId: Number(userId) },
+                select: { id: true }
             });
+            
+            if (captainProfile) {
+                ride = await prisma.ride.findFirst({
+                    where: { captainId: captainProfile.id, status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] } },
+                    select: {
+                        id: true,
+                        status: true,
+                        rider: {
+                            select: {
+                                fullName: true
+                            }
+                        },
+                        pickupAddress: true,
+                        dropoffAddress: true,
+                        pickupLat: true,
+                        pickupLng: true,
+                        dropoffLat: true,
+                        dropoffLng: true,
+                        fare: true,
+                        otp: true
+                    },
+                    orderBy: { createdAt: 'desc' }
+                });
+            }
         }
         res.status(200).json({ ride });
     } catch (error) {
@@ -157,15 +186,25 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
 
 export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
+        const userId = req.user?.userId;
         const { rideId } = req.body;
 
-        if(!captainId) {
+        if(!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
         if(!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
+        }
+
+        // Get the captain profile for this user
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+
+        if(!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
@@ -181,7 +220,7 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             prisma.ride.update({
                 where: { id: Number(rideId) },
                 data: {
-                    captainId: captainId,
+                    captainId: captainProfile.id,
                     status: "ACCEPTED"
                 },
                 select: {
@@ -189,10 +228,14 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
                     riderId: true,
                     captain: {
                         select: {
-                            fullName: true,
                             rating: true,
                             lastLat: true,
-                            lastLng: true
+                            lastLng: true,
+                            user: {
+                                select: {
+                                    fullName: true
+                                }
+                            }
                         }
                     },
                     fare: true,
@@ -202,15 +245,15 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
                     dropoffAddress: true
                 }
             }),
-            prisma.user.update({
-                where: { id: captainId },
+            prisma.captainProfile.update({
+                where: { id: captainProfile.id },
                 data: { isAvailable: false }
             })
         ]);
 
         sendNotification(updatedRide.riderId , "RIDE_ACCEPTED", {
             rideId: updatedRide.id,
-            captainName: updatedRide.captain?.fullName,
+            captainName: updatedRide.captain?.user.fullName,
             status: updatedRide.status,
             captainRating: updatedRide.captain?.rating,
             captainLocation: {
@@ -241,19 +284,30 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
 
 export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
+        const userId = req.user?.userId;
         const { rideId } = req.body;
-        if(!captainId) {
+        if(!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
         if(!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
         }
+        
+        // Get the captain profile for this user
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+
+        if(!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
+        }
+
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
         if(!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
-        if(ride.captainId !== captainId) {
+        if(ride.captainId !== captainProfile.id) {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
         if(ride.status !== "ACCEPTED") {
@@ -280,14 +334,24 @@ export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
 
 export const startRide = async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
+        const userId = req.user?.userId;
         const { rideId, otp } = req.body;
-        if(!captainId) {
+        if(!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
         if(!rideId || !otp) {
             return res.status(400).json({ message: "Ride ID and OTP are required." });
+        }
+
+        // Get the captain profile for this user
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+
+        if(!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
@@ -296,7 +360,7 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(404).json({ message: "Ride not found" });
         }
 
-        if(ride.captainId !== captainId) {
+        if(ride.captainId !== captainProfile.id) {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
 
@@ -330,15 +394,25 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
 
 export const completeRide = async ( req : AuthRequest , res : Response ) => {
     try {
-        const captainId = req.user?.userId;
+        const userId = req.user?.userId;
         const { rideId } = req.body;
 
-        if(!captainId) {
+        if(!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
         if(!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
+        }
+
+        // Get the captain profile for this user
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+
+        if(!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
@@ -347,7 +421,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(404).json({ message: "Ride not found" });
         }
 
-        if(ride.captainId !== captainId) {
+        if(ride.captainId !== captainProfile.id) {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
 
@@ -370,8 +444,8 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
                 where: { id: Number(rideId) },
                 data: { status: "COMPLETED", completedAt: new Date(), fare: parseFloat(finalFare.toFixed(2)) },
             }),
-            prisma.user.update({
-                where: { id: captainId },
+            prisma.captainProfile.update({
+                where: { id: captainProfile.id },
                 data: { isAvailable: true }
             })
         ]);
@@ -412,7 +486,22 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
         if(!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
-        if(ride.riderId !== userId && ride.captainId !== userId) {
+
+        // Check if user is the rider
+        const isRider = ride.riderId === userId;
+
+        // Check if user is the captain (need to get captain profile)
+        let isCaptain = false;
+        let captainProfile = null;
+        if (!isRider) {
+            captainProfile = await prisma.captainProfile.findUnique({
+                where: { userId: userId },
+                select: { id: true }
+            });
+            isCaptain = captainProfile ? ride.captainId === captainProfile.id : false;
+        }
+
+        if(!isRider && !isCaptain) {
             return res.status(403).json({ message: "You are not associated with this ride." });
         }
         if(ride.status === "COMPLETED" || ride.status === "CANCELLED") {
@@ -424,16 +513,31 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
         });
 
         if (ride.captainId) {
-            await prisma.user.update({
+            await prisma.captainProfile.update({
                 where: { id: ride.captainId },
                 data: { isAvailable: true }
             });
         }
 
         const partyIds = [ride.riderId];
-        if (ride.captainId) partyIds.push(ride.captainId);
+        if (ride.captainId) {
+            // Get the userId for the captain to send notification
+            const captainWithUser = await prisma.captainProfile.findUnique({
+                where: { id: ride.captainId },
+                select: { userId: true }
+            });
+            if (captainWithUser) partyIds.push(captainWithUser.userId);
+        }
         else {
-            partyIds.push(...(await findNearbyCaptains(ride.pickupLat, ride.pickupLng, 5)).map(captain => captain.id));
+            // Notify nearby captains (these are CaptainProfile IDs, need to get userIds)
+            const nearbyCaptains = await findNearbyCaptains(ride.pickupLat, ride.pickupLng, 5);
+            for (const captain of nearbyCaptains) {
+                const captainData = await prisma.captainProfile.findUnique({
+                    where: { id: captain.id },
+                    select: { userId: true }
+                });
+                if (captainData) partyIds.push(captainData.userId);
+            }
         }
 
         partyIds.forEach(id => {
