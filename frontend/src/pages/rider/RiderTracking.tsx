@@ -158,7 +158,7 @@ const RiderTracking = () => {
     return () => { 
       Object.keys(listeners).forEach(event => { socket.off(event) });
     };
-  }, [rideData, navigate, socket, rideStatus]);
+  }, [rideData, navigate, socket, rideStatus, rideDetails]);
 
   return (
     <div className="h-screen w-screen flex flex-col relative bg-gray-100 overflow-hidden font-sans">

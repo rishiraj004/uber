@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap'; // Import the shared Map component
+import { AxiosError } from 'axios';
 
 const CaptainTracking = () => {
   const location = useLocation();
@@ -94,6 +95,7 @@ const CaptainTracking = () => {
       await api.post('/ride/arrived-at-pickup', { rideId });
       setRideStatus('ARRIVED');
     } catch (err) {
+      console.error("Error updating status to ARRIVED:", err);
       toast.error("Error updating status to ARRIVED");
     }
   };
@@ -105,8 +107,9 @@ const CaptainTracking = () => {
       const rideId = initialRide.rideId || initialRide.id;
       await api.post('/ride/start-ride', { rideId, otp });
       setRideStatus('ONGOING');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Error starting trip");
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ message: string }>;
+      toast.error(error.response?.data?.message || "Error starting trip");
     } finally {
       setLoading(false);
     }
@@ -119,6 +122,7 @@ const CaptainTracking = () => {
       await api.post('/ride/complete-ride', { rideId });
       navigate('/captain-dashboard');
     } catch (err) {
+      console.error("Error completing trip:", err);
       toast.error("Error completing trip");
     } finally {
       setLoading(false);
