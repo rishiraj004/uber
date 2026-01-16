@@ -22,7 +22,9 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
         const durationInMinutes = (distanceKm / 40) * 60; // Assuming average speed of 40 km/h....later will fetch from map api
         const fare = calculateRideFare(distanceKm, durationInMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');  
         res.status(200).json({ 
-            estimatedCost: parseFloat(fare.toFixed(2))
+            estimatedCost: parseFloat(fare.toFixed(2)),
+            distanceKm: parseFloat(distanceKm.toFixed(2)),
+            durationMinutes: parseFloat(durationInMinutes.toFixed(2))
         });
     } catch (error) {
         console.error("Error calculating fare:", error);
@@ -42,7 +44,7 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
         let ride;
         if(role === "RIDER") {
             ride = await prisma.ride.findFirst({
-                where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] } },
+                where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING','COMPLETED'] } },
                 select: {
                     id: true, 
                     status: true,

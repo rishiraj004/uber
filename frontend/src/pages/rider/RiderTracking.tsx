@@ -69,6 +69,7 @@ const RiderTracking = () => {
     captainName: string;
     vehicleColor: string;
     vehicleModel: string;
+    vehicleType: string;
     rating: number;
     status: string;
     fare: number;
@@ -140,7 +141,7 @@ const RiderTracking = () => {
       RIDE_STARTED: () => { setRideStatus('ONGOING'); },
       RIDE_COMPLETED: () => { 
         setRideStatus('COMPLETED'); 
-        navigate('/rider-receipt', { state: { ride: rideData } }); 
+        navigate('/rider-receipt', { state: { ride: rideDetails } }); 
       },
       CAPTAIN_LOCATION_UPDATE: (data: { latitude: number; longitude: number }) => {
         const newCoords: [number, number] = [data.latitude, data.longitude];
