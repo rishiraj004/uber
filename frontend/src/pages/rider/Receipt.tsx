@@ -1,14 +1,34 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle, Ruler, Clock } from 'lucide-react';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
+import RatingModal from '../../components/RatingModal';
 
 const Receipt = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { ride } = location.state || {};
 
-    const [fare,setFare] = React.useState({ fare: 0, distance: 0, duration: 0 });
+    const [fare, setFare] = React.useState({ fare: 0, distance: 0, duration: 0 });
+    const [showRatingModal, setShowRatingModal] = useState(true);
+    const [hasReviewed, setHasReviewed] = useState(false);
+
+    useEffect(() => {
+        const checkReviewStatus = async () => {
+            if (!ride?.rideId && !ride?.id) return;
+            try {
+                const response = await api.get(`/review/status/${ride?.rideId || ride?.id}`);
+                setHasReviewed(response.data.hasReviewed);
+                if (response.data.hasReviewed) {
+                    setShowRatingModal(false);
+                }
+            } catch (error) {
+                console.error("Error checking review status:", error);
+            }
+        };
+        checkReviewStatus();
+    }, [ride]);
+
     useEffect(() => {
         const fetchRideDetails = async () => {
             try {
@@ -30,10 +50,29 @@ const Receipt = () => {
         };
         fetchRideDetails();
     }, [ride]);
+
+    const handleRatingSubmit = () => {
+        setShowRatingModal(false);
+        setHasReviewed(true);
+    };
+
     if (!ride) return <div>No receipt data found.</div>;
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
+            {/* Rating Modal */}
+            {!hasReviewed && (
+                <RatingModal
+                    isOpen={showRatingModal}
+                    onClose={() => setShowRatingModal(false)}
+                    onSubmit={handleRatingSubmit}
+                    rideId={ride?.rideId || ride?.id}
+                    recipientName={ride?.captainName || 'Your Captain'}
+                    reviewType="RIDER_TO_CAPTAIN"
+                    title="Rate Your Ride"
+                />
+            )}
+
             <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 mt-10 border border-gray-100">
                 <div className="flex flex-col items-center mb-8">
                     <div className="bg-green-100 p-4 rounded-full mb-4">
@@ -64,6 +103,16 @@ const Receipt = () => {
                         <span className="font-bold">{fare.duration} mins</span>
                     </div>
                 </div>
+
+                {/* Rate Again Button (if skipped) */}
+                {!hasReviewed && (
+                    <button 
+                        onClick={() => setShowRatingModal(true)}
+                        className="w-full bg-yellow-400 text-black py-4 rounded-2xl font-bold mb-4 hover:bg-yellow-500 transition"
+                    >
+                        ⭐ Rate Your Captain
+                    </button>
+                )}
 
                 <button 
                     onClick={() => navigate('/rider-dashboard')}

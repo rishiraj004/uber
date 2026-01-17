@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { MapPin, Navigation, DollarSign, Power } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, Power, Star } from 'lucide-react';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 
 interface RideRequest {
   rideId: number;
   riderName: string;
+  riderRating?: number;
   fare: number;
   pickupAddress: string;
   dropoffAddress: string;
@@ -130,8 +131,6 @@ const CaptainDashboard = () => {
     try {
       const response = await api.patch('/captain/toggle-status');
       setIsOnline(response.data.isOnline);
-      // Refresh analytics after toggling status (to update online hours)
-      fetchAnalytics();
     } catch (error) {
       console.error("Error toggling status", error);
     }
@@ -198,7 +197,14 @@ const CaptainDashboard = () => {
             <div className="flex justify-between items-start mb-4">
               <div>
                 <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded">NEW REQUEST</span>
-                <h4 className="text-xl font-bold mt-1">{currentRideRequest.riderName}</h4>
+                <div className="flex items-center gap-2 mt-1">
+                  <h4 className="text-xl font-bold">{currentRideRequest.riderName}</h4>
+                  {/* Rider Rating */}
+                  <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-full">
+                    <Star size={14} className="fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm font-bold">{currentRideRequest.riderRating?.toFixed(1) || '5.0'}</span>
+                  </div>
+                </div>
               </div>
               <p className="text-2xl font-black">₹{currentRideRequest.fare}</p>
             </div>

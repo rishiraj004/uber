@@ -197,8 +197,44 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
   - Server updates `CaptainProfile` location, stores location in Redis (using `CaptainProfile.id`) and creates `RideLocationLog` entries for ongoing rides (every ~10s).
 
 - Server emits (examples):
-  - `NEW_RIDE_REQUEST` -> sent to captains with payload `{ rideId, pickupAddress, dropoffAddress, fare, riderName }`
+  - `NEW_RIDE_REQUEST` -> sent to captains with payload `{ rideId, pickupAddress, dropoffAddress, fare, riderName, riderRating }`
   - `RIDE_ACCEPTED` -> sent to rider with payload `{ rideId, captainName, status, captainRating, captainLocation, fare, otp }`
   - `CAPTAIN_ARRIVED`, `RIDE_STARTED`, `RIDE_COMPLETED`, `RIDE_CANCELLED`, `CAPTAIN_LOCATION_UPDATE` with similar payloads.
+
+---
+
+## Review
+
+- POST `/api/v1/review/submit` (authenticated)
+
+  - Description: Submit a review for a completed ride. Recalculates and updates the reviewee's average rating.
+  - Body (application/json):
+    - `rideId` (number) - required
+    - `rating` (number, 1-5) - required
+    - `comment` (string) - optional
+    - `type` ("RIDER_TO_CAPTAIN" | "CAPTAIN_TO_RIDER") - required
+  - Response 201:
+    - `message`: string
+    - `review`: review object
+  - Validation:
+    - Ride must exist and be COMPLETED
+    - Reviewer must have been part of the ride
+    - Cannot submit duplicate reviews
+
+- GET `/api/v1/review/user/:userId` (authenticated)
+
+  - Description: Get all reviews received by a specific user.
+  - Params:
+    - `userId` (number)
+  - Response 200:
+    - `reviews`: array of review objects with reviewer info and ride details
+
+- GET `/api/v1/review/status/:rideId` (authenticated)
+  - Description: Check if the current user has already reviewed a specific ride.
+  - Params:
+    - `rideId` (number)
+  - Response 200:
+    - `hasReviewed`: boolean
+    - `review`: review object or null
 
 ---

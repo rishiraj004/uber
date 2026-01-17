@@ -14,7 +14,9 @@ export const userData = async (userId: number) => {
                 select: {
                     id: true,
                     homeAddress: true,
-                    workAddress: true
+                    workAddress: true,
+                    rating: true,
+                    totalRides: true
                 }
             },
             captainProfile: {

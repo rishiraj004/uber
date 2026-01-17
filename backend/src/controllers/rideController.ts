@@ -117,9 +117,15 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                     select: {
                         id: true,
                         status: true,
+                        riderId: true,
                         rider: {
                             select: {
-                                fullName: true
+                                fullName: true,
+                                riderProfile: {
+                                    select: {
+                                        rating: true
+                                    }
+                                }
                             }
                         },
                         pickupAddress: true,
@@ -138,8 +144,10 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                 if (rideData) {
                     ride = {
                         rideId: rideData.id,
+                        riderId: rideData.riderId,
                         status: rideData.status,
                         riderName: rideData.rider.fullName,
+                        riderRating: rideData.rider.riderProfile?.rating || 5.0,
                         pickupAddress: rideData.pickupAddress,
                         dropoffAddress: rideData.dropoffAddress,
                         pickupLat: rideData.pickupLat,
@@ -168,7 +176,20 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         }
 
         const riderId = req.user?.userId;
-        const riderName = await prisma.user.findUnique({ where: { id: riderId! } }).then(user => user?.fullName || "Rider");
+        
+        // Get rider info including rating
+        const riderInfo = await prisma.user.findUnique({ 
+            where: { id: riderId! },
+            include: {
+                riderProfile: {
+                    select: {
+                        rating: true
+                    }
+                }
+            }
+        });
+        const riderName = riderInfo?.fullName || "Rider";
+        const riderRating = riderInfo?.riderProfile?.rating || 5.0;
 
         const otp = crypto.randomInt(1000, 9999).toString();
         const distanceKm = distanceBetweenPoints(
@@ -212,7 +233,8 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                         pickupAddress: newRide.pickupAddress,
                         dropoffAddress: newRide.dropoffAddress,
                         fare: newRide.fare,
-                        riderName: riderName
+                        riderName: riderName,
+                        riderRating: riderRating
                     }
                 );
             }

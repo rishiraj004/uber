@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert } from 'lucide-react';
+import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert, Star } from 'lucide-react';
 import api from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap'; // Import the shared Map component
 import { AxiosError } from 'axios';
+import RatingModal from '../../components/RatingModal';
 
 const CaptainTracking = () => {
   const location = useLocation();
@@ -17,6 +18,8 @@ const CaptainTracking = () => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSheetHidden, setIsSheetHidden] = useState(false); // Toggle state
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [completedRideData, setCompletedRideData] = useState<{ rideId: number; riderName: string; riderId: number } | null>(null);
 
   // Map States
   const [path, setPath] = useState<[number, number][]>([]);
@@ -120,7 +123,13 @@ const CaptainTracking = () => {
     try {
       const rideId = initialRide.rideId || initialRide.id;
       await api.post('/ride/complete-ride', { rideId });
-      navigate('/captain-dashboard');
+      // Store ride data for rating modal
+      setCompletedRideData({
+        rideId: rideId,
+        riderName: initialRide?.riderName || 'Rider',
+        riderId: initialRide?.riderId
+      });
+      setShowRatingModal(true);
     } catch (err) {
       console.error("Error completing trip:", err);
       toast.error("Error completing trip");
@@ -129,10 +138,33 @@ const CaptainTracking = () => {
     }
   };
 
+  const handleRatingSubmit = () => {
+    setShowRatingModal(false);
+    navigate('/captain-dashboard');
+  };
+
+  const handleSkipRating = () => {
+    setShowRatingModal(false);
+    navigate('/captain-dashboard');
+  };
+
   const isMapReady = pickupCoords && pickupCoords[0] !== undefined && dropoffCoords && dropoffCoords[0] !== undefined;
   return (
     <div className="h-screen w-screen relative bg-zinc-900 overflow-hidden">
       
+      {/* Rating Modal */}
+      {completedRideData && (
+        <RatingModal
+          isOpen={showRatingModal}
+          onClose={handleSkipRating}
+          onSubmit={handleRatingSubmit}
+          rideId={completedRideData.rideId}
+          recipientName={completedRideData.riderName}
+          reviewType="CAPTAIN_TO_RIDER"
+          title="Rate Your Rider"
+        />
+      )}
+
       {/* 1. Map Layout - Dynamic Height based on sheet state */}
       <div className='absolute inset-0 z-0 bg-slate-300 transition-all duration-300'>
         <div className="absolute inset-0 opacity-20 pointer-events-none z-10" 
@@ -174,6 +206,11 @@ const CaptainTracking = () => {
                 <div>
                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Rider</p>
                   <h3 className="text-xl font-black">{initialRide?.riderName || 'Customer'}</h3>
+                  {/* Rider Rating */}
+                  <div className="flex items-center gap-1 mt-1">
+                    <Star size={14} className="fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm font-bold text-gray-600">{initialRide?.riderRating?.toFixed(1) || '5.0'}</span>
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
