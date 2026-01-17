@@ -33,10 +33,29 @@ enum VehicleType {
   AUTO
 }
 
+enum ReviewType {
+  RIDER_TO_CAPTAIN
+  CAPTAIN_TO_RIDER
+}
+
+model Review {
+  id         Int        @id @default(autoincrement())
+  ride       Ride       @relation("RideReviews", fields: [rideId], references: [id])
+  rideId     Int
+  reviewer   User       @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewerId Int
+  reviewee   User       @relation("Reviewee", fields: [revieweeId], references: [id])
+  revieweeId Int
+  rating     Int
+  comment    String?
+  type       ReviewType
+  createdAt  DateTime   @default(now())
+}
+
 model RideLocationLog {
-  id        Int      @id @default(autoincrement())
-  ride      Ride     @relation(fields: [rideId], references: [id])
-  rideId    Int
+  id     Int  @id @default(autoincrement())
+  ride   Ride @relation(fields: [rideId], references: [id])
+  rideId Int
 
   latitude  Float
   longitude Float
@@ -45,90 +64,96 @@ model RideLocationLog {
 }
 
 model Ride {
-  id             Int        @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  pickupAddress  String
-  pickupLat      Float
-  pickupLng      Float
+  pickupAddress String
+  pickupLat     Float
+  pickupLng     Float
 
   dropoffAddress String
   dropoffLat     Float
   dropoffLng     Float
-  
-  rider         User       @relation("RiderRides", fields: [riderId], references: [id])
-  riderId       Int
-  
-  captain       CaptainProfile?      @relation("CaptainRides", fields: [captainId], references: [id])
-  captainId     Int?
 
-  locationLogs  RideLocationLog[]
-  
-  status        RideStatus @default(PENDING)
+  rider   User @relation("RiderRides", fields: [riderId], references: [id])
+  riderId Int
 
-  vehicleType   VehicleType
-  
-  fare          Float?
+  captain   CaptainProfile? @relation("CaptainRides", fields: [captainId], references: [id])
+  captainId Int?
 
-  otp           String?
+  locationLogs RideLocationLog[]
+  reviews      Review[] @relation("RideReviews")
 
-  startedAt     DateTime?
-  completedAt   DateTime?
-  
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-}
+  status RideStatus @default(PENDING)
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String?
-  fullName  String
-  phone     String   @unique
-  role      Role     @default(RIDER)
+  vehicleType VehicleType
 
-  //Relations
-  riderProfile   RiderProfile?
-  captainProfile CaptainProfile?
-  
-  ridesAsRider   Ride[]   @relation("RiderRides")
-  
+  fare Float?
+
+  otp String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model User {
+  id       Int     @id @default(autoincrement())
+  email    String  @unique
+  password String?
+  fullName String
+  phone    String  @unique
+  role     Role    @default(RIDER)
+
+  //Relations
+  riderProfile   RiderProfile?
+  captainProfile CaptainProfile?
+
+  ridesAsRider Ride[] @relation("RiderRides")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reviews   Review[] @relation("Reviewer")
+  reviewsReceived Review[] @relation("Reviewee")
+}
+
 model RiderProfile {
-  id        Int    @id @default(autoincrement())
-  user      User   @relation(fields: [userId], references: [id])
-  userId    Int    @unique
+  id     Int  @id @default(autoincrement())
+  user   User @relation(fields: [userId], references: [id])
+  userId Int  @unique
 
   homeAddress String?
   workAddress String?
+
+  rating     Float @default(5.0)
+  totalRides Int   @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model CaptainProfile {
-  id            Int      @id @default(autoincrement())
-  user          User     @relation(fields: [userId], references: [id])
-  userId        Int      @unique
+  id     Int  @id @default(autoincrement())
+  user   User @relation(fields: [userId], references: [id])
+  userId Int  @unique
 
   vehicleType   VehicleType
   vehicleNumber String
   vehicleModel  String
   vehicleColor  String
 
-  isAvailable   Boolean  @default(true)
-  isOnline      Boolean  @default(false)
+  isAvailable Boolean @default(true)
+  isOnline    Boolean @default(false)
 
-  lastLat     Float?
-  lastLng     Float?
+  lastLat Float?
+  lastLng Float?
 
-  rating      Float    @default(5.0)
-  totalRides  Int      @default(0)
-  totalEarnings Float   @default(0.0)
+  rating        Float @default(5.0)
+  totalRides    Int   @default(0)
+  totalEarnings Float @default(0.0)
 
-  ridesGiven Ride[]   @relation("CaptainRides")
+  ridesGiven Ride[]  @relation("CaptainRides")
   shifts     Shift[]
 
   createdAt DateTime @default(now())
@@ -136,13 +161,13 @@ model CaptainProfile {
 }
 
 model Shift {
-  id          Int      @id @default(autoincrement())
-  captain     CaptainProfile @relation(fields: [captainId], references: [id])
-  captainId   Int
+  id        Int            @id @default(autoincrement())
+  captain   CaptainProfile @relation(fields: [captainId], references: [id])
+  captainId Int
 
-  startTime   DateTime
-  endTime     DateTime?
+  startTime DateTime
+  endTime   DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
