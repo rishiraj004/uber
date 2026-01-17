@@ -53,7 +53,7 @@ export const signup = async (req: Request, res: Response) => {
         const token = jwt.sign(
             { userId: user.id, role: user.role },
             process.env.JWT_SECRET as string,
-            { expiresIn: "24h" }
+            { expiresIn: "30d" }
         );
 
         const { password: _, ...userWithoutPassword } = user;
@@ -87,7 +87,7 @@ export const login = async ( req : Request , res : Response ) => {
         const token = jwt.sign(
             { userId: user.id, role: user.role },
             process.env.JWT_SECRET as string,
-            { expiresIn: "24h" }
+            { expiresIn: "30d" }
         );
 
         const { password: _, ...userWithoutPassword } = user;
@@ -107,7 +107,7 @@ export const getProfile = async ( req : AuthRequest , res : Response ) => {
     try {
         const userId = req.user?.userId;
 
-        const user = userData(userId!);
+        const user = await userData(userId!);
 
         if (!user) {
             return res.status(404).json({ message: "User not found." });

@@ -6,6 +6,7 @@ import { findNearbyCaptains } from "../services/mapService";
 import { distanceBetweenPoints, calculateTotalPathDistance, calculateTotalTime } from "../utils";
 import { sendNotification } from "../config/socket";
 import { calculateRideFare } from "../services/rideService";
+import { getDistanceAndDuration } from "../services/mapService";
 
 export const calculateFare = async ( req: AuthRequest, res: Response) => {
     try {
@@ -13,18 +14,21 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
         if(!vehicleType || !pickupCoords || !destCoords) {
             return res.status(400).json({ message: "Vehicle type, pickup and destination coordinates are required." });
         }
-        const distanceKm = distanceBetweenPoints(
-            pickupCoords.lat, 
-            pickupCoords.lng,
-            destCoords.lat,
-            destCoords.lng
+        const result = await getDistanceAndDuration(
+            [pickupCoords.lat, pickupCoords.lng],
+            [destCoords.lat, destCoords.lng]
         );
-        const durationInMinutes = (distanceKm / 40) * 60; // Assuming average speed of 40 km/h....later will fetch from map api
-        const fare = calculateRideFare(distanceKm, durationInMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');  
+        
+        if (!result) {
+            return res.status(400).json({ message: "Unable to calculate distance and duration." });
+        }
+        
+        const { distanceKm, durationMinutes } = result;
+        const fare = calculateRideFare(distanceKm, durationMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');
         res.status(200).json({ 
             estimatedCost: parseFloat(fare.toFixed(2)),
             distanceKm: parseFloat(distanceKm.toFixed(2)),
-            durationMinutes: parseFloat(durationInMinutes.toFixed(2))
+            durationMinutes: parseFloat(durationMinutes.toFixed(2))
         });
     } catch (error) {
         console.error("Error calculating fare:", error);
