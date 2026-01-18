@@ -4,7 +4,7 @@ import {
   Phone, MessageSquare, ShieldCheck, 
   XCircle, AlertTriangle, CheckCircle2 
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import api from '../../services/api';
 import { useSocket } from '../../context/socket-context';
 import { RideMap } from '../../components/RideMap';
@@ -53,7 +53,6 @@ const RiderTracking = () => {
   const rideData = location.state?.ride;
   
   const [rideStatus, setRideStatus] = useState(rideData?.status || 'ACCEPTED');
-  const [showFareBreakdown, setShowFareBreakdown] = useState(false);
   
   // --- ADDED: State to track if the sheet is hidden ---
   const [isSheetHidden, setIsSheetHidden] = useState(false);
@@ -242,7 +241,7 @@ const RiderTracking = () => {
           </div>
         </div>
 
-        {/* 5. OTP & Fare Breakdown (Feature #4) */}
+        {/* 5. OTP  */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="bg-zinc-900 text-white p-5 rounded-3xl flex flex-col items-center shadow-lg">
              <p className="text-[9px] uppercase opacity-50 tracking-[0.2em] font-black mb-1">Trip OTP</p>
@@ -256,33 +255,6 @@ const RiderTracking = () => {
               </div>
               <h3 className="text-2xl font-black text-zinc-900">₹{rideData?.fare || '154'}</h3>
             </div>
-
-            <AnimatePresence>
-              {showFareBreakdown && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute inset-0 bg-white border-2 border-black p-4 rounded-3xl z-20 flex flex-col justify-between shadow-2xl"
-                >
-                  <div className="text-[10px] space-y-1">
-                    <div className="flex justify-between"><span>Base Fare</span><span>₹30.00</span></div>
-                    <div className="flex justify-between"><span>Distance (4.2km)</span><span>₹84.00</span></div>
-                    <div className="flex justify-between"><span>Duration (15m)</span><span>₹30.00</span></div>
-                    <div className="h-px bg-gray-100 my-1" />
-                    <div className="flex justify-between font-bold text-black"><span>Total</span><span>₹144.00</span></div>
-                  </div>
-                  <button 
-                    onClick={() => setShowFareBreakdown(false)}
-                    className="text-[9px] font-black uppercase text-center w-full text-blue-600"
-                    title="Close fare breakdown"
-                    aria-label="Close fare breakdown"
-                  >
-                    Close
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
 

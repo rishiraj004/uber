@@ -201,7 +201,7 @@ const RiderDashboard: React.FC = () => {
             const response = await api.post("/ride/calculate-fare", {
                 pickupCoords,
                 destCoords: dropoffCoords,
-                vehicleType: "CAR",
+                vehicleType: vehicleType,
             });
 
             const { distanceKm, durationMinutes, estimatedCost } = response.data;
@@ -234,7 +234,7 @@ const RiderDashboard: React.FC = () => {
             console.error("Error calculating fares:", err);
             toast.error("Unable to calculate fare. Please try again.");
         }
-    }, [pickupCoords, dropoffCoords, coordsChanged]);
+    }, [pickupCoords, dropoffCoords, coordsChanged, vehicleType]);
 
     // Trigger fare calculation when both locations are set
     useEffect(() => {
