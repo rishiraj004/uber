@@ -12,13 +12,22 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
         }
         const captainProfile = await prisma.captainProfile.findUnique({ 
             where: { userId: userId },
-            select: { id: true, isOnline: true }
+            select: { id: true, isOnline: true, isVerified: true }
         });
         if (!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const goingOnline = !captainProfile.isOnline;
+
+        // Prevent unverified captains from going online
+        if (goingOnline && !captainProfile.isVerified) {
+            return res.status(403).json({ 
+                message: "Cannot go online. Please complete document verification first.",
+                isVerified: false,
+                redirectTo: "/captain/documents"
+            });
+        }
 
         const updatedCaptain = await prisma.captainProfile.update({
             where: { id: captainProfile.id },

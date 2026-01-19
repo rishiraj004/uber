@@ -1,7 +1,8 @@
 import { authenticate } from "./authMiddelwares";
-import { authorizeRole } from "./roleMiddlewares";
+import { authorizeRole, authorizeAdmin } from "./roleMiddlewares";
 
 export {
     authenticate,
-    authorizeRole
+    authorizeRole,
+    authorizeAdmin
 };

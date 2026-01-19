@@ -12,3 +12,11 @@ export const authorizeRole = ( requiredRole : 'RIDER' | 'CAPTAIN') => {
         next();
     }
 }
+
+export const authorizeAdmin = ( req : AuthRequest , res : Response , next : NextFunction ) => {
+    const userRole = req.user?.role;
+    if (userRole !== 'ADMIN') {
+        return res.status(403).json({ message: "Access denied. Admin privileges required." });
+    }
+    next();
+}

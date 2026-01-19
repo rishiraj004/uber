@@ -169,11 +169,13 @@ export const findNearbyCaptains = async ( riderLat: number , riderLng : number ,
         if (!nearbyCaptainIDs || nearbyCaptainIDs.length === 0) return [];
 
         // Redis stores the CaptainProfile id
+        // Only include verified, online, and available captains
         const response = await prisma.captainProfile.findMany({
             where: {
                 id: { in: nearbyCaptainIDs.map(id => Number(id)) },
                 isOnline: true,
-                isAvailable: true
+                isAvailable: true,
+                isVerified: true  // Only verified captains can receive ride requests
             },
             select: {
                 id: true,
@@ -187,7 +189,7 @@ export const findNearbyCaptains = async ( riderLat: number , riderLng : number ,
                 }
             }
         });
-        console.log("Nearby captains found:", response);
+        console.log("Nearby verified captains found:", response);
         return response.map(captain => ({
             id: captain.id,
             fullName: captain.user.fullName,

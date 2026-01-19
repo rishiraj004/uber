@@ -6,6 +6,8 @@ import reviewRoutes from '../v1/reviewRoutes';
 import mapRoutes from '../v1/mapRoutes';
 import profileRoutes from '../v1/profileRoutes';
 import chatRoutes from '../v1/chatRoutes';
+import documentRoutes from '../v1/documentRoutes';
+import adminRoutes from '../v1/adminRoutes';
 
 const router = Router();
 
@@ -16,5 +18,7 @@ router.use('/review', reviewRoutes);
 router.use('/map', mapRoutes);
 router.use('/profile', profileRoutes);
 router.use('/chat', chatRoutes);
+router.use('/documents', documentRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;

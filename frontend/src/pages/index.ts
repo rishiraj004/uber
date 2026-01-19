@@ -1,5 +1,5 @@
 import { RiderTracking, RiderDashboard, Receipt } from "./rider";
-import { CaptainTracking, CaptainDashboard } from "./captain";
+import { CaptainTracking, CaptainDashboard, CaptainDocuments } from "./captain";
 import { LoginPage, SignupPage } from "./auth";
 import RideHistory from "./RideHistory";
 import Profile from "./Profile";
@@ -10,6 +10,7 @@ export {
     Receipt,
     CaptainTracking,
     CaptainDashboard,
+    CaptainDocuments,
     LoginPage,
     SignupPage,
     RideHistory,

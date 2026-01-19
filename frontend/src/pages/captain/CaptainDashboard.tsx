@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History, FileText, AlertCircle } from 'lucide-react';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap';
@@ -28,12 +28,21 @@ interface Analytics {
   totalOnlineHours: number;
 }
 
+interface VerificationStatus {
+  isVerified: boolean;
+  canGoOnline: boolean;
+  pendingCount: number;
+  rejectedCount: number;
+  message: string;
+}
+
 const CaptainDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [currentRideRequest, setCurrentRideRequest] = useState<RideRequest | null>(null);
   const [analytics, setAnalytics] = useState<Analytics>({ totalEarnings: 0, totalTrips: 0, totalOnlineHours: 0 });
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [requestTimer, setRequestTimer] = useState(30);
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
   
   const watchId = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -54,6 +63,10 @@ const CaptainDashboard = () => {
           totalTrips: analyticsResponse.data.totalTrips || 0,
           totalOnlineHours: analyticsResponse.data.totalOnlineHours || 0
         });
+
+        // Fetch verification status
+        const verificationResponse = await api.get('/documents/verification-status');
+        setVerificationStatus(verificationResponse.data);
       } catch (error) {
         console.error("Error fetching captain status", error);
       }
@@ -203,6 +216,13 @@ const CaptainDashboard = () => {
   }, [socket, currentRideRequest]);
 
   const handleStatusToggle = async () => {
+    // Check verification status before going online
+    if (!isOnline && verificationStatus && !verificationStatus.canGoOnline) {
+      toast.error('Please complete document verification first');
+      navigate('/captain/documents');
+      return;
+    }
+
     try {
       const response = await api.patch('/captain/toggle-status');
       setIsOnline(response.data.isOnline);
@@ -217,9 +237,14 @@ const CaptainDashboard = () => {
           location: { latitude: currentLocation[0], longitude: currentLocation[1] }
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling status", error);
-      toast.error("Could not update status");
+      if (error.response?.data?.redirectTo) {
+        toast.error(error.response.data.message || 'Verification required');
+        navigate(error.response.data.redirectTo);
+      } else {
+        toast.error("Could not update status");
+      }
     }
   };
 
@@ -273,6 +298,33 @@ const CaptainDashboard = () => {
   return (
     <div className="h-screen w-screen flex flex-col bg-zinc-50 overflow-hidden">
       
+      {/* Verification Banner */}
+      {verificationStatus && !verificationStatus.canGoOnline && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-center justify-between z-30">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="text-amber-500" size={20} />
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                {verificationStatus.isVerified 
+                  ? 'Account verified but missing documents'
+                  : 'Complete document verification to start accepting rides'
+                }
+              </p>
+              <p className="text-xs text-amber-600">
+                {verificationStatus.uploadedDocuments} of {verificationStatus.requiredDocuments} documents uploaded
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/captain/documents')}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+          >
+            <FileText size={16} />
+            Upload Documents
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-6 py-4 bg-white border-b border-zinc-100 flex justify-between items-center z-20">
         <div className="flex items-center gap-4">
