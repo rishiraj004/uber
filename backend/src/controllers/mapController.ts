@@ -1,14 +1,15 @@
 import { Response } from "express";
 import { AuthRequest } from "../middlewares/authMiddelwares";
-import { getAddressSuggestions, getDistanceAndDuration } from "../services/mapService";
+import { getAddressSuggestions, getDistanceAndDuration, retrieveSearchBoxResult } from "../services/mapService";
 
 /**
- * Get address suggestions from Mapbox Geocoding API
+ * Get address suggestions from Mapbox Search Box API
  * Uses session tokens for billing optimization
+ * Supports proximity bias for better local results
  */
 export const addressSuggestions = async (req: AuthRequest, res: Response) => {
     try {
-        const { query, sessionToken } = req.query;
+        const { query, sessionToken, lat, lng } = req.query;
 
         if (!query || typeof query !== 'string') {
             return res.status(400).json({ message: "Query is required" });
@@ -18,14 +19,49 @@ export const addressSuggestions = async (req: AuthRequest, res: Response) => {
             return res.status(200).json([]);
         }
 
+        // Parse proximity coordinates if provided
+        const proximity = lat && lng ? {
+            lat: Number(lat),
+            lng: Number(lng)
+        } : undefined;
+
         const suggestions = await getAddressSuggestions(
             query,
-            (sessionToken as string) || ''
+            (sessionToken as string) || '',
+            proximity
         );
 
         res.status(200).json(suggestions);
     } catch (error) {
         console.error("Error fetching address suggestions:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Retrieve full place details including coordinates
+ * Called when user selects a Search Box suggestion
+ */
+export const retrievePlaceDetails = async (req: AuthRequest, res: Response) => {
+    try {
+        const { mapboxId, sessionToken } = req.query;
+
+        if (!mapboxId || typeof mapboxId !== 'string') {
+            return res.status(400).json({ message: "Mapbox ID is required" });
+        }
+
+        const result = await retrieveSearchBoxResult(
+            mapboxId,
+            (sessionToken as string) || ''
+        );
+
+        if (!result) {
+            return res.status(404).json({ message: "Place not found" });
+        }
+
+        res.status(200).json(result);
+    } catch (error) {
+        console.error("Error retrieving place details:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
