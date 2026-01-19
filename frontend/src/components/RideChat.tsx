@@ -30,7 +30,7 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socket = useSocket();
 
   const token = localStorage.getItem('token');
@@ -212,7 +212,7 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
-        className="fixed inset-0 z-50 flex flex-col bg-white md:inset-auto md:bottom-4 md:right-4 md:w-96 md:h-[500px] md:rounded-2xl md:shadow-2xl overflow-hidden"
+        className="fixed inset-0 z-50 flex flex-col bg-white md:inset-auto md:bottom-4 md:right-4 md:w-96 md:h-125 md:rounded-2xl md:shadow-2xl overflow-hidden"
       >
         {/* Header */}
         <div className="bg-zinc-900 text-white p-4 flex items-center justify-between shrink-0">

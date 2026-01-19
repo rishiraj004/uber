@@ -133,7 +133,7 @@ model User {
   riderProfile   RiderProfile?
   captainProfile CaptainProfile?
 
-  ridesAsRider Ride[] @relation("RiderRides")
+  ridesAsRider Ride[]        @relation("RiderRides")
   chatMessages ChatMessage[]
 
   createdAt       DateTime @default(now())

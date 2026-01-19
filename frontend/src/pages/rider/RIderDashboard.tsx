@@ -441,7 +441,7 @@ const RiderDashboard: React.FC = () => {
                                         </div>
                                         <div className="text-left overflow-hidden">
                                             <p className="text-sm font-medium text-zinc-900">Home</p>
-                                            <p className="text-xs text-zinc-500 truncate max-w-[100px]">{savedAddresses.homeAddress}</p>
+                                            <p className="text-xs text-zinc-500 truncate max-w-25">{savedAddresses.homeAddress}</p>
                                         </div>
                                     </button>
                                 )}
@@ -461,7 +461,7 @@ const RiderDashboard: React.FC = () => {
                                         </div>
                                         <div className="text-left overflow-hidden">
                                             <p className="text-sm font-medium text-zinc-900">Work</p>
-                                            <p className="text-xs text-zinc-500 truncate max-w-[100px]">{savedAddresses.workAddress}</p>
+                                            <p className="text-xs text-zinc-500 truncate max-w-25">{savedAddresses.workAddress}</p>
                                         </div>
                                     </button>
                                 )}

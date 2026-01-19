@@ -362,7 +362,7 @@ const Profile = () => {
 
               {/* Earnings for Captains */}
               {userRole === 'CAPTAIN' && profile?.captainProfile && (
-                <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 rounded-2xl p-6 text-white">
+                <div className="bg-linear-to-r from-zinc-900 to-zinc-800 rounded-2xl p-6 text-white">
                   <p className="text-sm text-white/60 uppercase tracking-wider">Total Earnings</p>
                   <p className="text-3xl font-bold mt-1">₹{profile.captainProfile.totalEarnings.toFixed(2)}</p>
                 </div>
