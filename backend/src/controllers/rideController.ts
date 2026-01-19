@@ -36,6 +36,132 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
     }   
 };
 
+// Get a specific ride by ID (for Receipt/Review pages)
+export const getRideById = async (req: AuthRequest, res: Response) => {
+    try {
+        const { rideId } = req.params;
+        const userId = req.user?.userId;
+        const role = req.user?.role;
+
+        if (!rideId) {
+            return res.status(400).json({ message: "Ride ID is required." });
+        }
+
+        const ride = await prisma.ride.findUnique({
+            where: { id: Number(rideId) },
+            select: {
+                id: true,
+                status: true,
+                pickupAddress: true,
+                pickupLat: true,
+                pickupLng: true,
+                dropoffAddress: true,
+                dropoffLat: true,
+                dropoffLng: true,
+                fare: true,
+                otp: true,
+                vehicleType: true,
+                estimatedDistance: true,
+                estimatedDuration: true,
+                routeGeometry: true,
+                startedAt: true,
+                completedAt: true,
+                createdAt: true,
+                riderId: true,
+                captainId: true,
+                rider: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        riderProfile: {
+                            select: { rating: true }
+                        }
+                    }
+                },
+                captain: {
+                    select: {
+                        id: true,
+                        rating: true,
+                        lastLat: true,
+                        lastLng: true,
+                        isOnline: true,
+                        userId: true,
+                        user: {
+                            select: { fullName: true }
+                        },
+                        vehicleNumber: true,
+                        vehicleModel: true,
+                        vehicleColor: true,
+                        vehicleType: true
+                    }
+                }
+            }
+        });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found." });
+        }
+
+        // Verify user is associated with this ride
+        let isAuthorized = ride.riderId === userId;
+        if (!isAuthorized && role === "CAPTAIN") {
+            const captainProfile = await prisma.captainProfile.findUnique({
+                where: { userId: userId! },
+                select: { id: true }
+            });
+            isAuthorized = captainProfile?.id === ride.captainId;
+        }
+
+        if (!isAuthorized) {
+            return res.status(403).json({ message: "You are not authorized to view this ride." });
+        }
+
+        // Format response based on role
+        const response: any = {
+            rideId: ride.id,
+            status: ride.status,
+            pickupAddress: ride.pickupAddress,
+            pickupLat: ride.pickupLat,
+            pickupLng: ride.pickupLng,
+            dropoffAddress: ride.dropoffAddress,
+            dropoffLat: ride.dropoffLat,
+            dropoffLng: ride.dropoffLng,
+            fare: ride.fare,
+            vehicleType: ride.vehicleType,
+            estimatedDistance: ride.estimatedDistance,
+            estimatedDuration: ride.estimatedDuration,
+            startedAt: ride.startedAt,
+            completedAt: ride.completedAt,
+            createdAt: ride.createdAt
+        };
+
+        if (role === "RIDER" && ride.captain) {
+            response.otp = ride.otp;
+            response.captainName = ride.captain.user.fullName;
+            response.captainRating = ride.captain.rating;
+            response.captainLocation = {
+                lat: ride.captain.lastLat,
+                lng: ride.captain.lastLng
+            };
+            response.captainIsOnline = ride.captain.isOnline;
+            response.vehicleNumber = ride.captain.vehicleNumber;
+            response.vehicleModel = ride.captain.vehicleModel;
+            response.vehicleColor = ride.captain.vehicleColor;
+        } else if (role === "CAPTAIN") {
+            response.riderId = ride.riderId;
+            response.riderName = ride.rider.fullName;
+            response.riderRating = ride.rider.riderProfile?.rating || 5.0;
+            response.otp = ride.otp;
+        }
+
+        res.status(200).json({ ride: response });
+    } catch (error) {
+        console.error("Error fetching ride by ID:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Get active ride details for a user (excludes COMPLETED/CANCELLED)
 export const getRideDetails = async ( req: AuthRequest, res: Response) => {
     try {
         const { userId } = req.params;
@@ -48,7 +174,7 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
         let ride;
         if(role === "RIDER") {
             ride = await prisma.ride.findFirst({
-                where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING','COMPLETED'] } },
+                where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] } },
                 select: {
                     id: true, 
                     status: true,
@@ -593,20 +719,22 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: `Cannot complete ride in ${ride.status} status.` });
         }
 
+        // Use the upfront fare stored when ride was created
+        // This ensures riders are charged what they were quoted, not penalized for captain detours
+        const finalFare = ride.fare;
+        
+        // Calculate actual distance/duration for analytics (not for charging)
         const logs = await prisma.rideLocationLog.findMany({
             where: { rideId: Number(rideId) },
             orderBy: { timestamp: 'asc' }
         });
-
-        const totalDistance = calculateTotalPathDistance(logs.map(log => ({ lat: log.latitude, lng: log.longitude })));
-        const durationInMinutes = calculateTotalTime(logs);
-
-        const finalFare = calculateRideFare(totalDistance, durationInMinutes, ride?.vehicleType as 'CAR' | 'BIKE' | 'AUTO');
+        const actualDistance = calculateTotalPathDistance(logs.map(log => ({ lat: log.latitude, lng: log.longitude })));
+        const actualDurationMinutes = calculateTotalTime(logs);
 
         const [completedRide ] = await prisma.$transaction([
             prisma.ride.update({
                 where: { id: Number(rideId) },
-                data: { status: "COMPLETED", completedAt: new Date(), fare: parseFloat(finalFare.toFixed(2)) },
+                data: { status: "COMPLETED", completedAt: new Date() },
             }),
             prisma.captainProfile.update({
                 where: { id: captainProfile.id },
@@ -617,17 +745,21 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
         sendNotification(completedRide.riderId , "RIDE_COMPLETED", {
             rideId: completedRide.id,
             status: completedRide.status,
-            fare: completedRide.fare,
-            distance: parseFloat(totalDistance.toFixed(2)),
-            duration: parseFloat(durationInMinutes.toFixed(2)),
+            fare: finalFare,
+            estimatedDistance: ride.estimatedDistance,
+            estimatedDuration: ride.estimatedDuration,
+            actualDistance: parseFloat(actualDistance.toFixed(2)),
+            actualDuration: parseFloat(actualDurationMinutes.toFixed(2)),
             message: "Thank you for riding with us!"
         });
 
         res.status(200).json({ 
             message: "Ride completed successfully",
             ride: completedRide,
-            distance: parseFloat(totalDistance.toFixed(2)),
-            duration: parseFloat(durationInMinutes.toFixed(2))
+            estimatedDistance: ride.estimatedDistance,
+            estimatedDuration: ride.estimatedDuration,
+            actualDistance: parseFloat(actualDistance.toFixed(2)),
+            actualDuration: parseFloat(actualDurationMinutes.toFixed(2))
         });
     } catch (error) {
         console.error("Error completing ride:", error);

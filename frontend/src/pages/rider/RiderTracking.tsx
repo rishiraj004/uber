@@ -142,9 +142,25 @@ const RiderTracking = () => {
       RIDE_CANCELLED: () => { navigate('/rider-dashboard'); setRideStatus('CANCELLED'); },
       CAPTAIN_ARRIVED: () => { setRideStatus('ARRIVED'); },
       RIDE_STARTED: () => { setRideStatus('ONGOING'); },
-      RIDE_COMPLETED: () => { 
+      RIDE_COMPLETED: (data: { 
+        rideId: number; 
+        fare: number; 
+        estimatedDistance?: number; 
+        estimatedDuration?: number;
+      }) => { 
         setRideStatus('COMPLETED'); 
-        navigate('/rider-receipt', { state: { ride: rideDetails } }); 
+        // Pass complete ride data including fare and distance/duration to receipt
+        navigate('/rider-receipt', { 
+          state: { 
+            ride: {
+              ...rideDetails,
+              rideId: data.rideId,
+              fare: data.fare,
+              estimatedDistance: data.estimatedDistance,
+              estimatedDuration: data.estimatedDuration
+            }
+          } 
+        }); 
       },
       CAPTAIN_LOCATION_UPDATE: (data: { latitude: number; longitude: number }) => {
         const newCoords: [number, number] = [data.latitude, data.longitude];

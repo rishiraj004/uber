@@ -1,23 +1,68 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle, Ruler, Clock } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import RatingModal from '../../components/RatingModal';
 
+interface RideData {
+    rideId?: number;
+    id?: number;
+    fare: number;
+    estimatedDistance?: number;
+    estimatedDuration?: number;
+    pickupLat?: number;
+    pickupLng?: number;
+    dropoffLat?: number;
+    dropoffLng?: number;
+    vehicleType?: string;
+    captainName?: string;
+}
+
 const Receipt = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { ride } = location.state || {};
+    const { rideId: paramRideId } = useParams();
+    const stateRide = location.state?.ride as RideData | undefined;
 
-    const [fare, setFare] = React.useState({ fare: 0, distance: 0, duration: 0 });
+    const [ride, setRide] = useState<RideData | null>(stateRide || null);
+    const [loading, setLoading] = useState(!stateRide);
     const [showRatingModal, setShowRatingModal] = useState(true);
     const [hasReviewed, setHasReviewed] = useState(false);
 
+    // Fetch ride data if not passed via state (e.g., direct URL access)
+    useEffect(() => {
+        const fetchRide = async () => {
+            const rideIdToFetch = paramRideId || stateRide?.rideId || stateRide?.id;
+            if (!rideIdToFetch) {
+                setLoading(false);
+                return;
+            }
+            
+            // If we already have ride data from state with fare, use it
+            if (stateRide?.fare) {
+                setRide(stateRide);
+                setLoading(false);
+                return;
+            }
+
+            try {
+                const response = await api.get(`/ride/${rideIdToFetch}`);
+                setRide(response.data.ride);
+            } catch (error) {
+                console.error("Error fetching ride:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchRide();
+    }, [paramRideId, stateRide]);
+
     useEffect(() => {
         const checkReviewStatus = async () => {
-            if (!ride?.rideId && !ride?.id) return;
+            const rideId = ride?.rideId || ride?.id;
+            if (!rideId) return;
             try {
-                const response = await api.get(`/review/status/${ride?.rideId || ride?.id}`);
+                const response = await api.get(`/review/status/${rideId}`);
                 setHasReviewed(response.data.hasReviewed);
                 if (response.data.hasReviewed) {
                     setShowRatingModal(false);
@@ -29,34 +74,18 @@ const Receipt = () => {
         checkReviewStatus();
     }, [ride]);
 
-    useEffect(() => {
-        const fetchRideDetails = async () => {
-            try {
-                console.log("Fetching ride details for receipt:", ride);
-                const fareResponse = await api.post('/ride/calculate-fare', {
-                    pickupCoords: { lat: ride.pickupLat, lng: ride.pickupLng },
-                    destCoords: { lat: ride.dropoffLat, lng: ride.dropoffLng },
-                    vehicleType: ride.vehicleType
-                });
-                console.log("Fetched ride details for receipt:", fareResponse.data);
-                setFare({
-                    fare: fareResponse.data.estimatedCost,
-                    distance: fareResponse.data.distanceKm,
-                    duration: fareResponse.data.durationMinutes
-                });
-            } catch (error) {
-                console.error("Error fetching ride details for receipt:", error);
-            }
-        };
-        fetchRideDetails();
-    }, [ride]);
-
     const handleRatingSubmit = () => {
         setShowRatingModal(false);
         setHasReviewed(true);
     };
 
-    if (!ride) return <div>No receipt data found.</div>;
+    if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
+    if (!ride) return <div className="min-h-screen bg-gray-50 flex items-center justify-center">No receipt data found.</div>;
+
+    const rideId = ride.rideId || ride.id;
+    const fare = ride.fare || 0;
+    const distance = ride.estimatedDistance || 0;
+    const duration = ride.estimatedDuration || 0;
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
@@ -66,7 +95,7 @@ const Receipt = () => {
                     isOpen={showRatingModal}
                     onClose={() => setShowRatingModal(false)}
                     onSubmit={handleRatingSubmit}
-                    rideId={ride?.rideId || ride?.id}
+                    rideId={rideId}
                     recipientName={ride?.captainName || 'Your Captain'}
                     reviewType="RIDER_TO_CAPTAIN"
                     title="Rate Your Ride"
@@ -84,7 +113,7 @@ const Receipt = () => {
 
                 <div className="text-center mb-10">
                     <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Final Fare</p>
-                    <h1 className="text-5xl font-black">₹{fare.fare}</h1>
+                    <h1 className="text-5xl font-black">₹{fare}</h1>
                 </div>
 
                 <div className="space-y-6 border-t border-b border-dashed border-gray-200 py-8 mb-8">
@@ -93,14 +122,14 @@ const Receipt = () => {
                             <Ruler size={18} />
                             <span className="text-sm font-medium">Distance Traveled</span>
                         </div>
-                        <span className="font-bold">{fare.distance} km</span>
+                        <span className="font-bold">{distance} km</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3 text-gray-500">
                             <Clock size={18} />
                             <span className="text-sm font-medium">Trip Duration</span>
                         </div>
-                        <span className="font-bold">{fare.duration} mins</span>
+                        <span className="font-bold">{Math.round(duration)} mins</span>
                     </div>
                 </div>
 
