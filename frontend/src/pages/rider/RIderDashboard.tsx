@@ -114,6 +114,15 @@ const RiderDashboard: React.FC = () => {
     const [rideId, setRideId] = useState<number | null>(null);
     const [error, setError] = useState("");
 
+    // Search status for dynamic broadcaster feedback
+    const [searchStatus, setSearchStatus] = useState<{
+        currentRadius: number;
+        captainsNotified: number;
+        elapsedSeconds: number;
+        maxSeconds: number;
+        message: string;
+    } | null>(null);
+
     // Saved addresses
     const [savedAddresses, setSavedAddresses] = useState<{
         homeAddress: string | null;
@@ -175,6 +184,7 @@ const RiderDashboard: React.FC = () => {
             toast.success('Ride accepted! Captain is on the way.');
             navigate("/rider-tracking", { state: { ride: data } });
             setLoading(false);
+            setSearchStatus(null);
         };
 
         const handleRideExpired = (data: { rideId: number; message: string }) => {
@@ -182,14 +192,30 @@ const RiderDashboard: React.FC = () => {
                 toast.error(data.message || 'No captains available. Please try again.');
                 setRideId(null);
                 setLoading(false);
+                setSearchStatus(null);
+            }
+        };
+
+        const handleRideSearching = (data: { 
+            rideId: number; 
+            currentRadius: number;
+            captainsNotified: number;
+            elapsedSeconds: number;
+            maxSeconds: number;
+            message: string;
+        }) => {
+            if (rideId === data.rideId) {
+                setSearchStatus(data);
             }
         };
 
         socket.on("RIDE_ACCEPTED", handleRideAccepted);
         socket.on("RIDE_EXPIRED", handleRideExpired);
+        socket.on("RIDE_SEARCHING", handleRideSearching);
         return () => { 
             socket.off("RIDE_ACCEPTED", handleRideAccepted);
             socket.off("RIDE_EXPIRED", handleRideExpired);
+            socket.off("RIDE_SEARCHING", handleRideSearching);
         };
     }, [socket, navigate, rideId]);
 
@@ -523,6 +549,30 @@ const RiderDashboard: React.FC = () => {
                                 </>
                             )}
                         </button>
+
+                        {/* Search Progress Indicator */}
+                        {loading && searchStatus && (
+                            <div className="mt-4 p-4 bg-zinc-50 rounded-xl border border-zinc-200">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-zinc-700">Searching for captains</span>
+                                    <span className="text-xs text-zinc-500">
+                                        {searchStatus.elapsedSeconds}s / {searchStatus.maxSeconds}s
+                                    </span>
+                                </div>
+                                <div className="w-full bg-zinc-200 rounded-full h-2 mb-2">
+                                    <div 
+                                        className="bg-zinc-900 h-2 rounded-full transition-all duration-500"
+                                        style={{ width: `${(searchStatus.elapsedSeconds / searchStatus.maxSeconds) * 100}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-zinc-500">
+                                    {searchStatus.captainsNotified > 0 
+                                        ? `${searchStatus.captainsNotified} captain(s) notified within ${searchStatus.currentRadius}km`
+                                        : `Expanding search radius to ${searchStatus.currentRadius}km...`
+                                    }
+                                </p>
+                            </div>
+                        )}
 
                         {/* Cancel Button */}
                         {loading && rideId && (

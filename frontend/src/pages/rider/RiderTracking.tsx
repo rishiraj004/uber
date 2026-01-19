@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Phone, MessageSquare, ShieldCheck, 
-  XCircle, AlertTriangle, CheckCircle2 
+  XCircle, AlertTriangle, CheckCircle2, Navigation 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '../../services/api';
@@ -84,6 +84,35 @@ const RiderTracking = () => {
   }
   
   const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
+
+  // Live ETA state
+  const [captainEta, setCaptainEta] = useState<{ distance: number; duration: number } | null>(null);
+
+  // Function to fetch ETA from captain to pickup/dropoff
+  const fetchCaptainEta = useCallback(async (captainLat: number, captainLng: number) => {
+    if (!pickupCoords) return;
+    
+    // Use pickup coords if not yet arrived/ongoing, dropoff if ongoing
+    const targetLat = rideStatus === 'ONGOING' && dropoffCoords ? dropoffCoords[0] : pickupCoords[0];
+    const targetLng = rideStatus === 'ONGOING' && dropoffCoords ? dropoffCoords[1] : pickupCoords[1];
+
+    try {
+      const response = await api.get('/map/directions', {
+        params: {
+          originLat: captainLat,
+          originLng: captainLng,
+          destLat: targetLat,
+          destLng: targetLng
+        }
+      });
+      setCaptainEta({
+        distance: response.data.distanceKm,
+        duration: response.data.durationMinutes
+      });
+    } catch (error) {
+      console.error("Error fetching captain ETA:", error);
+    }
+  }, [pickupCoords, dropoffCoords, rideStatus]);
   
   useEffect(() => {
     const fetchCoords = async () => {
@@ -168,6 +197,8 @@ const RiderTracking = () => {
         if (rideStatus === 'ONGOING') {
           setPath(prevPath => [...prevPath, newCoords]);
         }
+        // Fetch live ETA on location update (throttled by backend updates ~10s)
+        fetchCaptainEta(data.latitude, data.longitude);
       }
     }
     Object.entries(listeners).forEach(([event, handler]) => {
@@ -177,7 +208,7 @@ const RiderTracking = () => {
     return () => { 
       Object.keys(listeners).forEach(event => { socket.off(event) });
     };
-  }, [rideData, navigate, socket, rideStatus, rideDetails]);
+  }, [rideData, navigate, socket, rideStatus, rideDetails, fetchCaptainEta]);
 
   return (
     <div className="h-screen w-screen flex flex-col relative bg-gray-100 overflow-hidden font-sans">
@@ -240,7 +271,7 @@ const RiderTracking = () => {
         </div>
 
         {/* Captain & Vehicle Info */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <div className="relative">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden border border-gray-100">
@@ -267,6 +298,26 @@ const RiderTracking = () => {
             </button>
           </div>
         </div>
+
+        {/* Live ETA Display */}
+        {captainEta && rideStatus !== 'COMPLETED' && (
+          <div className="bg-green-50 border border-green-100 p-4 rounded-xl mb-6 flex items-center gap-3">
+            <div className="bg-green-500 text-white p-2 rounded-xl">
+              <Navigation size={20} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-green-800">
+                {rideStatus === 'ONGOING' 
+                  ? `${Math.round(captainEta.duration)} min to destination`
+                  : `Captain is ${Math.round(captainEta.duration)} min away`
+                }
+              </p>
+              <p className="text-xs text-green-600">
+                {captainEta.distance.toFixed(1)} km {rideStatus === 'ONGOING' ? 'remaining' : 'from pickup'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* 5. OTP  */}
         <div className="grid grid-cols-2 gap-4 mb-8">

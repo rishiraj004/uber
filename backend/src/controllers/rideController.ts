@@ -387,6 +387,21 @@ const startCaptainDispatch = async (
     const startTime = Date.now();
     const notifiedCaptains = new Set<number>();
 
+    // Helper to send search status to rider
+    const sendSearchStatus = (riderId: number, captainsNotified: number, elapsedSeconds: number) => {
+        sendNotification(riderId, "RIDE_SEARCHING", {
+            rideId,
+            currentRadius,
+            maxRadius,
+            captainsNotified,
+            elapsedSeconds,
+            maxSeconds: maxDispatchTime / 1000,
+            message: captainsNotified > 0 
+                ? `Searching... ${captainsNotified} captain(s) notified within ${currentRadius}km`
+                : `Expanding search to ${currentRadius}km radius...`
+        });
+    };
+
     const dispatchToCaptains = async () => {
         try {
             // Check if ride is still pending
@@ -456,6 +471,10 @@ const startCaptainDispatch = async (
                     );
                 }
             }
+
+            // Send search status update to rider
+            const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+            sendSearchStatus(ride.riderId, notifiedCaptains.size, elapsedSeconds);
 
             // Expand radius for next scan if under max
             if (currentRadius < maxRadius) {
