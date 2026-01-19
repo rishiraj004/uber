@@ -6,8 +6,8 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import api from '../../services/api';
-import { RideMap } from '../../components/RideMap';
+import api from '../services/api';
+import { RideMap } from '../components/RideMap';
 
 interface RideHistoryItem {
   id: number;
