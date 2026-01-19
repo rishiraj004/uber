@@ -1,7 +1,10 @@
 import { signup, login, getProfile } from "./authController";
-import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide, getRidePath, getRideDetails } from "./rideController";
+import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide, getRidePath, getRideDetails, getRideHistory, getRideHistoryDetail } from "./rideController";
 import { getCaptainStatus, toggleAvailability, getNearbyCaptains, updateLocation } from "./captainController";
 import { submitReview, getReviewsForUser, checkReviewStatus } from "./reviewController";
+import { updateRiderAddresses, getRiderAddresses, uploadCaptainDocument, getCaptainDocuments, getFullProfile } from "./profileController";
+import { sendChatMessage, getChatMessages } from "./chatController";
+
 export {
     signup,
     login,
@@ -14,11 +17,20 @@ export {
     cancelRide,
     getRidePath,
     getRideDetails,
+    getRideHistory,
+    getRideHistoryDetail,
     getCaptainStatus,
     toggleAvailability,
     getNearbyCaptains,
     updateLocation,
     submitReview,
     getReviewsForUser,
-    checkReviewStatus
+    checkReviewStatus,
+    updateRiderAddresses,
+    getRiderAddresses,
+    uploadCaptainDocument,
+    getCaptainDocuments,
+    getFullProfile,
+    sendChatMessage,
+    getChatMessages
 };

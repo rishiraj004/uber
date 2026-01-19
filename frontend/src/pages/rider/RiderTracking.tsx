@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import api from '../../services/api';
 import { useSocket } from '../../context/socket-context';
 import { RideMap } from '../../components/RideMap';
+import RideChat from '../../components/RideChat';
 
 const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
   const steps = [
@@ -56,6 +57,9 @@ const RiderTracking = () => {
   
   // --- ADDED: State to track if the sheet is hidden ---
   const [isSheetHidden, setIsSheetHidden] = useState(false);
+  
+  // Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const [path, setPath] = useState<[number, number][]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | undefined>(undefined);
@@ -237,7 +241,14 @@ const RiderTracking = () => {
           </div>
           <div className="flex gap-2">
             <button className="p-4 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors" title="Call driver" aria-label="Call driver"><Phone size={20} /></button>
-            <button className="p-4 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors" title="Message driver" aria-label="Message driver"><MessageSquare size={20} /></button>
+            <button 
+              onClick={() => setIsChatOpen(true)}
+              className="p-4 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors" 
+              title="Message driver" 
+              aria-label="Message driver"
+            >
+              <MessageSquare size={20} />
+            </button>
           </div>
         </div>
 
@@ -269,6 +280,15 @@ const RiderTracking = () => {
            <p className="text-[9px] font-black text-gray-300 tracking-widest uppercase">ID: #{rideData?.rideId || rideData?.id || '48291'}</p>
         </div>
       </motion.div>
+
+      {/* Chat Component */}
+      <RideChat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        rideId={rideData?.rideId || rideData?.id || 0}
+        recipientName={rideDetails?.captainName || 'Captain'}
+        recipientRole="CAPTAIN"
+      />
     </div>
 
   );

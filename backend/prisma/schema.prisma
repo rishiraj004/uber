@@ -38,6 +38,12 @@ enum ReviewType {
   CAPTAIN_TO_RIDER
 }
 
+enum DocumentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 model Review {
   id         Int        @id @default(autoincrement())
   ride       Ride       @relation("RideReviews", fields: [rideId], references: [id])
@@ -63,6 +69,17 @@ model RideLocationLog {
   timestamp DateTime @default(now())
 }
 
+// Chat Messages for real-time chat during rides
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  ride      Ride     @relation(fields: [rideId], references: [id])
+  rideId    Int
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  Int
+  message   String
+  createdAt DateTime @default(now())
+}
+
 model Ride {
   id Int @id @default(autoincrement())
 
@@ -81,13 +98,19 @@ model Ride {
   captainId Int?
 
   locationLogs RideLocationLog[]
-  reviews      Review[] @relation("RideReviews")
+  reviews      Review[]          @relation("RideReviews")
+  chatMessages ChatMessage[]
 
   status RideStatus @default(PENDING)
 
   vehicleType VehicleType
 
   fare Float?
+
+  // New fields for production-grade ride data
+  estimatedDistance Float? // Distance in km from Mapbox
+  estimatedDuration Float? // Duration in minutes from Mapbox
+  routeGeometry     String? @db.Text // GeoJSON geometry from Mapbox for route display
 
   otp String?
 
@@ -111,10 +134,11 @@ model User {
   captainProfile CaptainProfile?
 
   ridesAsRider Ride[] @relation("RiderRides")
+  chatMessages ChatMessage[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  reviews   Review[] @relation("Reviewer")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  reviews         Review[] @relation("Reviewer")
   reviewsReceived Review[] @relation("Reviewee")
 }
 
@@ -123,8 +147,13 @@ model RiderProfile {
   user   User @relation(fields: [userId], references: [id])
   userId Int  @unique
 
-  homeAddress String?
-  workAddress String?
+  // Saved addresses for one-tap booking
+  homeAddress    String?
+  homeAddressLat Float?
+  homeAddressLng Float?
+  workAddress    String?
+  workAddressLat Float?
+  workAddressLng Float?
 
   rating     Float @default(5.0)
   totalRides Int   @default(0)
@@ -153,11 +182,28 @@ model CaptainProfile {
   totalRides    Int   @default(0)
   totalEarnings Float @default(0.0)
 
+  // Captain documents
+  documents CaptainDocument[]
+
   ridesGiven Ride[]  @relation("CaptainRides")
   shifts     Shift[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Captain Documents for onboarding simulation
+model CaptainDocument {
+  id        Int            @id @default(autoincrement())
+  captain   CaptainProfile @relation(fields: [captainId], references: [id])
+  captainId Int
+
+  documentType String // LICENSE, INSURANCE, RC, AADHAR, PAN
+  documentUrl  String
+  status       DocumentStatus @default(PENDING)
+
+  uploadedAt DateTime  @default(now())
+  verifiedAt DateTime?
 }
 
 model Shift {

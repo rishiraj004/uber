@@ -1,7 +1,7 @@
 import axios from "axios";
 import api from "../../services/api";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Car, Bike, Zap, Clock, Route, LogOut, X, ChevronRight } from 'lucide-react';
+import { Car, Bike, Zap, Clock, Route, LogOut, X, ChevronRight, User, History, Home, Briefcase } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../../context/socket-context";
 import AddressAutocomplete from "../../components/AddressAutocomplete";
@@ -114,6 +114,16 @@ const RiderDashboard: React.FC = () => {
     const [rideId, setRideId] = useState<number | null>(null);
     const [error, setError] = useState("");
 
+    // Saved addresses
+    const [savedAddresses, setSavedAddresses] = useState<{
+        homeAddress: string | null;
+        homeAddressLat: number | null;
+        homeAddressLng: number | null;
+        workAddress: string | null;
+        workAddressLat: number | null;
+        workAddressLng: number | null;
+    } | null>(null);
+
     // Directions cache to avoid repeated API calls
     const directionsCache = useRef<DirectionsCache | null>(null);
     
@@ -125,6 +135,19 @@ const RiderDashboard: React.FC = () => {
 
     const socket = useSocket();
     const navigate = useNavigate();
+
+    // Fetch saved addresses on mount
+    useEffect(() => {
+        const fetchSavedAddresses = async () => {
+            try {
+                const response = await api.get('/profile/rider/addresses');
+                setSavedAddresses(response.data.addresses);
+            } catch (err) {
+                console.error("Error fetching saved addresses:", err);
+            }
+        };
+        fetchSavedAddresses();
+    }, []);
 
     // Check for active ride on mount
     useEffect(() => {
@@ -154,9 +177,21 @@ const RiderDashboard: React.FC = () => {
             setLoading(false);
         };
 
+        const handleRideExpired = (data: { rideId: number; message: string }) => {
+            if (rideId === data.rideId) {
+                toast.error(data.message || 'No captains available. Please try again.');
+                setRideId(null);
+                setLoading(false);
+            }
+        };
+
         socket.on("RIDE_ACCEPTED", handleRideAccepted);
-        return () => { socket.off("RIDE_ACCEPTED", handleRideAccepted); };
-    }, [socket, navigate]);
+        socket.on("RIDE_EXPIRED", handleRideExpired);
+        return () => { 
+            socket.off("RIDE_ACCEPTED", handleRideAccepted);
+            socket.off("RIDE_EXPIRED", handleRideExpired);
+        };
+    }, [socket, navigate, rideId]);
 
     // Check if coordinates have changed (for cache invalidation)
     const coordsChanged = useCallback((newPickup: Coordinates, newDropoff: Coordinates): boolean => {
@@ -318,13 +353,29 @@ const RiderDashboard: React.FC = () => {
                         <h1 className="text-xl font-bold text-zinc-900">Book a ride</h1>
                         <p className="text-sm text-zinc-500 mt-0.5">Get where you need to go</p>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
-                        title="Logout"
-                    >
-                        <LogOut size={20} className="text-zinc-500" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => navigate('/ride-history')}
+                            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+                            title="Ride History"
+                        >
+                            <History size={20} className="text-zinc-500" />
+                        </button>
+                        <button
+                            onClick={() => navigate('/profile')}
+                            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+                            title="Profile"
+                        >
+                            <User size={20} className="text-zinc-500" />
+                        </button>
+                        <button
+                            onClick={handleLogout}
+                            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+                            title="Logout"
+                        >
+                            <LogOut size={20} className="text-zinc-500" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Location Inputs */}
@@ -365,6 +416,55 @@ const RiderDashboard: React.FC = () => {
                             <div className="flex items-center gap-2 text-zinc-600">
                                 <Clock size={16} />
                                 <span className="text-sm font-medium">{Math.round(routeInfo.duration)} min</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quick Destinations - Saved Addresses */}
+                    {savedAddresses && (savedAddresses.homeAddress || savedAddresses.workAddress) && !dropoffCoords && (
+                        <div className="pt-2">
+                            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Quick destinations</p>
+                            <div className="flex gap-2">
+                                {savedAddresses.homeAddress && savedAddresses.homeAddressLat && savedAddresses.homeAddressLng && (
+                                    <button
+                                        onClick={() => {
+                                            setDropoff(savedAddresses.homeAddress!);
+                                            setDropoffCoords({
+                                                lat: savedAddresses.homeAddressLat!,
+                                                lng: savedAddresses.homeAddressLng!
+                                            });
+                                        }}
+                                        className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
+                                    >
+                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <Home size={16} className="text-blue-600" />
+                                        </div>
+                                        <div className="text-left overflow-hidden">
+                                            <p className="text-sm font-medium text-zinc-900">Home</p>
+                                            <p className="text-xs text-zinc-500 truncate max-w-[100px]">{savedAddresses.homeAddress}</p>
+                                        </div>
+                                    </button>
+                                )}
+                                {savedAddresses.workAddress && savedAddresses.workAddressLat && savedAddresses.workAddressLng && (
+                                    <button
+                                        onClick={() => {
+                                            setDropoff(savedAddresses.workAddress!);
+                                            setDropoffCoords({
+                                                lat: savedAddresses.workAddressLat!,
+                                                lng: savedAddresses.workAddressLng!
+                                            });
+                                        }}
+                                        className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
+                                    >
+                                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                            <Briefcase size={16} className="text-purple-600" />
+                                        </div>
+                                        <div className="text-left overflow-hidden">
+                                            <p className="text-sm font-medium text-zinc-900">Work</p>
+                                            <p className="text-xs text-zinc-500 truncate max-w-[100px]">{savedAddresses.workAddress}</p>
+                                        </div>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}

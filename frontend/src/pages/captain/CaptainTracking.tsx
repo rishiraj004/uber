@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap';
 import { AxiosError } from 'axios';
 import RatingModal from '../../components/RatingModal';
+import RideChat from '../../components/RideChat';
 
 interface RideData {
   id?: number;
@@ -38,6 +39,7 @@ const CaptainTracking = () => {
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [completedRideData, setCompletedRideData] = useState<{ rideId: number; riderName: string; riderId: number } | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Map States
   const [path, setPath] = useState<[number, number][]>([]);
@@ -270,6 +272,7 @@ const CaptainTracking = () => {
                 <Phone size={20} />
               </button>
               <button 
+                onClick={() => setIsChatOpen(true)}
                 title="Message rider" 
                 className="p-3 bg-zinc-100 rounded-xl text-zinc-600 hover:bg-zinc-200 transition-colors"
               >
@@ -411,6 +414,15 @@ const CaptainTracking = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* Chat Component */}
+      <RideChat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        rideId={initialRide?.rideId || initialRide?.id || 0}
+        recipientName={initialRide?.riderName || 'Rider'}
+        recipientRole="RIDER"
+      />
     </div>
   );
 };

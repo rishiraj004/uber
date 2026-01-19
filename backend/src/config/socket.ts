@@ -106,6 +106,144 @@ export const initSocket = (httpServer: HttpServer) => {
             }
         });
 
+        // Handle real-time chat messages
+        socket.on("SEND_CHAT_MESSAGE", async (data: { rideId: number; message: string }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const { rideId, message } = data;
+
+                // Get the ride and verify user is part of it
+                const ride = await prisma.ride.findUnique({
+                    where: { id: rideId },
+                    select: {
+                        id: true,
+                        status: true,
+                        riderId: true,
+                        captain: {
+                            select: { userId: true }
+                        }
+                    }
+                });
+
+                if (!ride || !['ACCEPTED', 'ARRIVED', 'ONGOING'].includes(ride.status)) {
+                    socket.emit("CHAT_ERROR", { message: "Chat is not available" });
+                    return;
+                }
+
+                const isRider = ride.riderId === userId;
+                const isCaptain = ride.captain?.userId === userId;
+
+                if (!isRider && !isCaptain) {
+                    socket.emit("CHAT_ERROR", { message: "You are not part of this ride" });
+                    return;
+                }
+
+                // Get sender info
+                const sender = await prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { fullName: true, role: true }
+                });
+
+                // Save message to database
+                const chatMessage = await prisma.chatMessage.create({
+                    data: {
+                        rideId,
+                        senderId: userId,
+                        message
+                    }
+                });
+
+                // Determine recipient
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                // Send to recipient
+                if (recipientId) {
+                    sendNotification(recipientId, "NEW_CHAT_MESSAGE", {
+                        messageId: chatMessage.id,
+                        rideId,
+                        senderId: userId,
+                        senderName: sender?.fullName || "User",
+                        senderRole: sender?.role,
+                        message,
+                        createdAt: chatMessage.createdAt
+                    });
+                }
+
+                // Confirm to sender
+                socket.emit("CHAT_MESSAGE_SENT", {
+                    messageId: chatMessage.id,
+                    rideId,
+                    message,
+                    createdAt: chatMessage.createdAt
+                });
+
+            } catch (error) {
+                console.error("Error sending chat message:", error);
+                socket.emit("CHAT_ERROR", { message: "Failed to send message" });
+            }
+        });
+
+        // Handle typing indicator
+        socket.on("TYPING_START", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const ride = await prisma.ride.findUnique({
+                    where: { id: data.rideId },
+                    select: {
+                        riderId: true,
+                        captain: { select: { userId: true } }
+                    }
+                });
+
+                if (!ride) return;
+
+                const isRider = ride.riderId === userId;
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                if (recipientId) {
+                    sendNotification(recipientId, "USER_TYPING", {
+                        rideId: data.rideId,
+                        userId
+                    });
+                }
+            } catch (error) {
+                console.error("Error handling typing indicator:", error);
+            }
+        });
+
+        socket.on("TYPING_STOP", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const ride = await prisma.ride.findUnique({
+                    where: { id: data.rideId },
+                    select: {
+                        riderId: true,
+                        captain: { select: { userId: true } }
+                    }
+                });
+
+                if (!ride) return;
+
+                const isRider = ride.riderId === userId;
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                if (recipientId) {
+                    sendNotification(recipientId, "USER_STOPPED_TYPING", {
+                        rideId: data.rideId,
+                        userId
+                    });
+                }
+            } catch (error) {
+                console.error("Error handling typing stop:", error);
+            }
+        });
+
         socket.on("disconnect", async () => {
             if(userId) {
                 if(socket.user?.role === 'CAPTAIN') {

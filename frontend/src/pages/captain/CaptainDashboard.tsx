@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History } from 'lucide-react';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap';
@@ -296,6 +296,20 @@ const CaptainDashboard = () => {
             {isOnline ? 'Go Offline' : 'Go Online'}
           </button>
           <button
+            onClick={() => navigate('/ride-history')}
+            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+            title="Ride History"
+          >
+            <History size={20} className="text-zinc-500" />
+          </button>
+          <button
+            onClick={() => navigate('/profile')}
+            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+            title="Profile"
+          >
+            <User size={20} className="text-zinc-500" />
+          </button>
+          <button
             onClick={handleLogout}
             className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
             title="Logout"
@@ -421,7 +435,7 @@ const CaptainDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-[500px] z-[9999]"
+            className="fixed bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-125 z-9999"
             style={{ pointerEvents: 'auto' }}
           >
                 <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 overflow-hidden">

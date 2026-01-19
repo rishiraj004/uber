@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 
 interface ProtectedRouteProps {
-  allow: 'RIDER' | 'CAPTAIN';
+  allow: 'RIDER' | 'CAPTAIN' | 'BOTH';
   children: React.ReactNode;
 }
 
@@ -12,6 +12,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allow, children }) => {
 
     if (!token) {
         return <Navigate to="/login" replace />;
+    }
+
+    // Allow access if allow is 'BOTH' (for shared pages like profile, ride history)
+    if (allow === 'BOTH') {
+        return <>{children}</>;
     }
 
     if (role !== allow) {

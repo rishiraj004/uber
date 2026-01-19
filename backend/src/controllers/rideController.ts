@@ -195,15 +195,20 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         const riderName = riderInfo?.fullName || "Rider";
         const riderRating = riderInfo?.riderProfile?.rating || 5.0;
 
-        const otp = crypto.randomInt(1000, 9999).toString();
-        const distanceKm = distanceBetweenPoints(
-            pickupCoords.lat, 
-            pickupCoords.lng, 
-            destCoords.lat, 
-            destCoords.lng
+        // Get actual road distance and duration from Mapbox
+        const routeData = await getDistanceAndDuration(
+            [pickupCoords.lat, pickupCoords.lng],
+            [destCoords.lat, destCoords.lng]
         );
-        const durationInMinutes = (distanceKm / 40) * 60; // Assuming average speed of 40 km/h....later will fetch from map api
-        const fare = calculateRideFare(distanceKm, durationInMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');
+        
+        if (!routeData) {
+            return res.status(400).json({ message: "Unable to calculate route. Please try again." });
+        }
+
+        const { distanceKm, durationMinutes, geometry } = routeData;
+        const otp = crypto.randomInt(1000, 9999).toString();
+        const fare = calculateRideFare(distanceKm, durationMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');
+        
         const newRide = await prisma.ride.create({
             data: {
                 riderId: riderId!,
@@ -215,44 +220,16 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                 dropoffLng: destCoords.lng,
                 vehicleType: vehicleType,
                 fare: parseFloat(fare.toFixed(2)),
+                estimatedDistance: parseFloat(distanceKm.toFixed(2)),
+                estimatedDuration: parseFloat(durationMinutes.toFixed(2)),
+                routeGeometry: geometry ? JSON.stringify(geometry) : null,
                 otp: otp,
                 status: "PENDING"
             }
         });
 
-        const nearbyCaptains = await findNearbyCaptains(pickupCoords.lat, pickupCoords.lng, 5);
-        console.log(`Found ${nearbyCaptains.length} nearby captains for ride creation`);
-
-        // Send notifications to nearby captains using their userId (not captainProfile.id)
-        for (const captain of nearbyCaptains) {
-            console.log(`Processing captain with id: ${captain.id}`);
-            const captainData = await prisma.captainProfile.findUnique({
-                where: { id: captain.id },
-                select: { userId: true }
-            });
-            console.log(`Captain data for id ${captain.id}:`, captainData);
-            if (captainData) {
-                console.log(`Sending NEW_RIDE_REQUEST to userId ${captainData.userId}`);
-                sendNotification(
-                    captainData.userId, 
-                    "NEW_RIDE_REQUEST",
-                    { 
-                        rideId: newRide.id,
-                        pickupAddress: newRide.pickupAddress,
-                        dropoffAddress: newRide.dropoffAddress,
-                        fare: newRide.fare,
-                        riderName: riderName,
-                        riderRating: riderRating,
-                        pickupLat: newRide.pickupLat,
-                        pickupLng: newRide.pickupLng,
-                        dropoffLat: newRide.dropoffLat,
-                        dropoffLng: newRide.dropoffLng,
-                        distanceKm: distanceKm,
-                        durationMinutes: durationInMinutes
-                    }
-                );
-            }
-        }
+        // Start dynamic captain dispatching with radius expansion
+        startCaptainDispatch(newRide.id, pickupCoords.lat, pickupCoords.lng, riderName, riderRating, distanceKm, durationMinutes);
 
         res.status(201).json({ 
             message: "Ride created successfully",
@@ -262,6 +239,113 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         console.error("Error creating ride:", error);
         res.status(500).json({ message: "Internal server error" });
     }
+};
+
+// Dynamic captain dispatching with radius expansion and timeout
+const activeDispatchIntervals = new Map<number, NodeJS.Timeout>();
+
+const startCaptainDispatch = async (
+    rideId: number, 
+    pickupLat: number, 
+    pickupLng: number,
+    riderName: string,
+    riderRating: number,
+    distanceKm: number,
+    durationMinutes: number
+) => {
+    let currentRadius = 3; // Start with 3km radius
+    const maxRadius = 15; // Maximum 15km radius
+    const radiusIncrement = 3; // Increase by 3km each time
+    const scanInterval = 15000; // Re-scan every 15 seconds
+    const maxDispatchTime = 120000; // 2 minutes timeout
+    const startTime = Date.now();
+    const notifiedCaptains = new Set<number>();
+
+    const dispatchToCaptains = async () => {
+        try {
+            // Check if ride is still pending
+            const ride = await prisma.ride.findUnique({ 
+                where: { id: rideId },
+                select: { status: true, fare: true, pickupAddress: true, dropoffAddress: true, pickupLat: true, pickupLng: true, dropoffLat: true, dropoffLng: true, riderId: true }
+            });
+            
+            if (!ride || ride.status !== "PENDING") {
+                // Ride is no longer pending, stop dispatching
+                clearInterval(activeDispatchIntervals.get(rideId));
+                activeDispatchIntervals.delete(rideId);
+                return;
+            }
+
+            // Check for timeout
+            if (Date.now() - startTime > maxDispatchTime) {
+                // Cancel the ride due to timeout
+                await prisma.ride.update({
+                    where: { id: rideId },
+                    data: { status: "CANCELLED" }
+                });
+                
+                sendNotification(ride.riderId, "RIDE_EXPIRED", {
+                    rideId: rideId,
+                    message: "No captains available at the moment. Please try again."
+                });
+
+                clearInterval(activeDispatchIntervals.get(rideId));
+                activeDispatchIntervals.delete(rideId);
+                return;
+            }
+
+            // Find nearby captains with current radius
+            const nearbyCaptains = await findNearbyCaptains(pickupLat, pickupLng, currentRadius);
+            console.log(`Dispatch scan: Found ${nearbyCaptains.length} captains within ${currentRadius}km for ride ${rideId}`);
+
+            // Send notifications to new captains only
+            for (const captain of nearbyCaptains) {
+                if (notifiedCaptains.has(captain.id)) continue;
+                
+                const captainData = await prisma.captainProfile.findUnique({
+                    where: { id: captain.id },
+                    select: { userId: true, vehicleType: true }
+                });
+                
+                if (captainData) {
+                    notifiedCaptains.add(captain.id);
+                    console.log(`Sending NEW_RIDE_REQUEST to captain userId ${captainData.userId} (radius: ${currentRadius}km)`);
+                    sendNotification(
+                        captainData.userId, 
+                        "NEW_RIDE_REQUEST",
+                        { 
+                            rideId: rideId,
+                            pickupAddress: ride.pickupAddress,
+                            dropoffAddress: ride.dropoffAddress,
+                            fare: ride.fare,
+                            riderName: riderName,
+                            riderRating: riderRating,
+                            pickupLat: ride.pickupLat,
+                            pickupLng: ride.pickupLng,
+                            dropoffLat: ride.dropoffLat,
+                            dropoffLng: ride.dropoffLng,
+                            distanceKm: distanceKm,
+                            durationMinutes: durationMinutes
+                        }
+                    );
+                }
+            }
+
+            // Expand radius for next scan if under max
+            if (currentRadius < maxRadius) {
+                currentRadius = Math.min(currentRadius + radiusIncrement, maxRadius);
+            }
+        } catch (error) {
+            console.error("Error in captain dispatch:", error);
+        }
+    };
+
+    // Initial dispatch
+    await dispatchToCaptains();
+
+    // Set up interval for re-scanning with expanded radius
+    const intervalId = setInterval(dispatchToCaptains, scanInterval);
+    activeDispatchIntervals.set(rideId, intervalId);
 };
 
 export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
@@ -663,4 +747,195 @@ export const getRidePath = async ( req : AuthRequest , res : Response ) => {
         res.status(500).json({ message: "Internal server error" }); 
 
     };
+};
+
+// Get ride history for riders and captains
+export const getRideHistory = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const role = req.user?.role;
+        const { page = 1, limit = 10 } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        let rides;
+        let total;
+
+        if (role === "RIDER") {
+            [rides, total] = await Promise.all([
+                prisma.ride.findMany({
+                    where: { 
+                        riderId: userId,
+                        status: { in: ['COMPLETED', 'CANCELLED'] }
+                    },
+                    select: {
+                        id: true,
+                        status: true,
+                        pickupAddress: true,
+                        dropoffAddress: true,
+                        pickupLat: true,
+                        pickupLng: true,
+                        dropoffLat: true,
+                        dropoffLng: true,
+                        fare: true,
+                        vehicleType: true,
+                        estimatedDistance: true,
+                        estimatedDuration: true,
+                        routeGeometry: true,
+                        startedAt: true,
+                        completedAt: true,
+                        createdAt: true,
+                        captain: {
+                            select: {
+                                user: { select: { fullName: true } },
+                                rating: true,
+                                vehicleNumber: true,
+                                vehicleModel: true,
+                                vehicleColor: true
+                            }
+                        },
+                        reviews: {
+                            where: { reviewerId: userId },
+                            select: { rating: true, comment: true }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    skip,
+                    take: Number(limit)
+                }),
+                prisma.ride.count({
+                    where: { riderId: userId, status: { in: ['COMPLETED', 'CANCELLED'] } }
+                })
+            ]);
+        } else if (role === "CAPTAIN") {
+            const captainProfile = await prisma.captainProfile.findUnique({
+                where: { userId },
+                select: { id: true }
+            });
+
+            if (!captainProfile) {
+                return res.status(404).json({ message: "Captain profile not found" });
+            }
+
+            [rides, total] = await Promise.all([
+                prisma.ride.findMany({
+                    where: { 
+                        captainId: captainProfile.id,
+                        status: { in: ['COMPLETED', 'CANCELLED'] }
+                    },
+                    select: {
+                        id: true,
+                        status: true,
+                        pickupAddress: true,
+                        dropoffAddress: true,
+                        pickupLat: true,
+                        pickupLng: true,
+                        dropoffLat: true,
+                        dropoffLng: true,
+                        fare: true,
+                        vehicleType: true,
+                        estimatedDistance: true,
+                        estimatedDuration: true,
+                        routeGeometry: true,
+                        startedAt: true,
+                        completedAt: true,
+                        createdAt: true,
+                        rider: {
+                            select: {
+                                fullName: true,
+                                riderProfile: { select: { rating: true } }
+                            }
+                        },
+                        reviews: {
+                            where: { reviewerId: userId },
+                            select: { rating: true, comment: true }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    skip,
+                    take: Number(limit)
+                }),
+                prisma.ride.count({
+                    where: { captainId: captainProfile.id, status: { in: ['COMPLETED', 'CANCELLED'] } }
+                })
+            ]);
+        } else {
+            return res.status(403).json({ message: "Invalid role" });
+        }
+
+        res.status(200).json({
+            rides,
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total,
+                totalPages: Math.ceil(total / Number(limit))
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching ride history:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Get single ride detail with route geometry
+export const getRideHistoryDetail = async (req: AuthRequest, res: Response) => {
+    try {
+        const { rideId } = req.params;
+        const userId = req.user?.userId;
+
+        if (!rideId) {
+            return res.status(400).json({ message: "Ride ID is required" });
+        }
+
+        const ride = await prisma.ride.findUnique({
+            where: { id: Number(rideId) },
+            include: {
+                rider: { select: { fullName: true, riderProfile: { select: { rating: true } } } },
+                captain: { 
+                    select: { 
+                        user: { select: { fullName: true } },
+                        rating: true,
+                        vehicleNumber: true,
+                        vehicleModel: true,
+                        vehicleColor: true,
+                        vehicleType: true
+                    }
+                },
+                locationLogs: {
+                    orderBy: { timestamp: 'asc' },
+                    select: { latitude: true, longitude: true, timestamp: true }
+                },
+                reviews: true
+            }
+        });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        // Parse route geometry if exists
+        let routeGeometry = null;
+        if (ride.routeGeometry) {
+            try {
+                routeGeometry = JSON.parse(ride.routeGeometry);
+            } catch (e) {
+                console.error("Error parsing route geometry:", e);
+            }
+        }
+
+        res.status(200).json({
+            ride: {
+                ...ride,
+                routeGeometry,
+                actualPath: ride.locationLogs.map(log => [log.latitude, log.longitude])
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching ride detail:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
 };
