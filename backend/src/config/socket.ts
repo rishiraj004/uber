@@ -131,8 +131,12 @@ export const initSocket = (httpServer: HttpServer) => {
 
 export const sendNotification = (userId: number, event: string, data: any) => {
     const socketId = userSocketMap.get(userId);
+    console.log(`Attempting to send ${event} to user ${userId}, socketId: ${socketId}, io available: ${!!io}`);
     if ( socketId && io) {
+        console.log(`Successfully sending ${event} to user ${userId} with data:`, data);
         io.to(socketId).emit(event, data);
+    } else {
+        console.log(`Failed to send ${event} to user ${userId} - socketId or io missing`);
     }
 };
 

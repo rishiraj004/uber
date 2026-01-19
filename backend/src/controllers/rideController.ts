@@ -221,14 +221,18 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         });
 
         const nearbyCaptains = await findNearbyCaptains(pickupCoords.lat, pickupCoords.lng, 5);
+        console.log(`Found ${nearbyCaptains.length} nearby captains for ride creation`);
 
         // Send notifications to nearby captains using their userId (not captainProfile.id)
         for (const captain of nearbyCaptains) {
+            console.log(`Processing captain with id: ${captain.id}`);
             const captainData = await prisma.captainProfile.findUnique({
                 where: { id: captain.id },
                 select: { userId: true }
             });
+            console.log(`Captain data for id ${captain.id}:`, captainData);
             if (captainData) {
+                console.log(`Sending NEW_RIDE_REQUEST to userId ${captainData.userId}`);
                 sendNotification(
                     captainData.userId, 
                     "NEW_RIDE_REQUEST",
@@ -238,7 +242,13 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                         dropoffAddress: newRide.dropoffAddress,
                         fare: newRide.fare,
                         riderName: riderName,
-                        riderRating: riderRating
+                        riderRating: riderRating,
+                        pickupLat: newRide.pickupLat,
+                        pickupLng: newRide.pickupLng,
+                        dropoffLat: newRide.dropoffLat,
+                        dropoffLng: newRide.dropoffLng,
+                        distanceKm: distanceKm,
+                        durationMinutes: durationInMinutes
                     }
                 );
             }

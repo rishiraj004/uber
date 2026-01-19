@@ -157,11 +157,29 @@ const CaptainDashboard = () => {
 
   // Socket listeners
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      console.log("Socket not available");
+      return;
+    }
+
+    console.log("Setting up socket listeners for captain dashboard");
 
     const handleNewRideRequest = (data: RideRequest) => {
+      console.log("New ride request received with full data:", {
+        rideId: data.rideId,
+        riderName: data.riderName,
+        fare: data.fare,
+        pickupAddress: data.pickupAddress,
+        dropoffAddress: data.dropoffAddress,
+        hasPickupLat: data.pickupLat !== undefined,
+        hasPickupLng: data.pickupLng !== undefined,
+        hasDropoffLat: data.dropoffLat !== undefined,
+        hasDropoffLng: data.dropoffLng !== undefined,
+        distanceKm: data.distanceKm,
+        durationMinutes: data.durationMinutes,
+        fullData: data
+      });
       setCurrentRideRequest(data);
-      console.log("New ride request received:", data);
       toast('New Ride Request!', {
         icon: '🚗',
         style: { borderRadius: '10px', background: '#18181B', color: '#fff' },
@@ -191,6 +209,14 @@ const CaptainDashboard = () => {
       toast(response.data.isOnline ? 'You are now online' : 'You are now offline', {
         icon: response.data.isOnline ? '🟢' : '🔴'
       });
+
+      // If going online, immediately send current location to server
+      if (response.data.isOnline && currentLocation && socket) {
+        console.log("Captain is now online, sending initial location:", currentLocation);
+        socket.emit('CAPTAIN_LOCATION_UPDATE', {
+          location: { latitude: currentLocation[0], longitude: currentLocation[1] }
+        });
+      }
     } catch (error) {
       console.error("Error toggling status", error);
       toast.error("Could not update status");
@@ -223,7 +249,16 @@ const CaptainDashboard = () => {
 
   // Calculate pickup coordinates for map preview
   const ridePreviewCoords = useMemo(() => {
-    if (!currentRideRequest) return null;
+    if (!currentRideRequest) {
+      console.log("No current ride request");
+      return null;
+    }
+    console.log("Calculating ride preview coords:", {
+      pickupLat: currentRideRequest.pickupLat,
+      pickupLng: currentRideRequest.pickupLng,
+      dropoffLat: currentRideRequest.dropoffLat,
+      dropoffLng: currentRideRequest.dropoffLng
+    });
     if (currentRideRequest.pickupLat && currentRideRequest.pickupLng) {
       return {
         pickup: [currentRideRequest.pickupLat, currentRideRequest.pickupLng] as [number, number],
@@ -271,7 +306,7 @@ const CaptainDashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         
         {/* Left Panel - Stats */}
         <div className="w-full md:w-95 bg-white border-r border-zinc-100 p-6 overflow-y-auto">
@@ -374,16 +409,21 @@ const CaptainDashboard = () => {
             </div>
           )}
 
-          {/* Ride Request Modal */}
-          <AnimatePresence>
-            {currentRideRequest && (
-              <motion.div
-                initial={{ opacity: 0, y: 100 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 100 }}
-                transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="absolute bottom-6 left-4 right-4 md:left-6 md:right-6 z-30"
-              >
+        </div>
+      </div>
+
+      {/* Ride Request Modal - Outside overflow containers */}
+      <AnimatePresence mode="wait">
+        {currentRideRequest && (
+          <motion.div
+            key="ride-request-card"
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-[500px] z-[9999]"
+            style={{ pointerEvents: 'auto' }}
+          >
                 <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 overflow-hidden">
                   {/* Timer Bar */}
                   <div className="h-1.5 bg-zinc-100">
@@ -479,11 +519,11 @@ const CaptainDashboard = () => {
                 </div>
               </motion.div>
             )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </div>
-  );
-};
+                    </AnimatePresence>
+                </div>
+             
+            );
+          };
+          
+          export default CaptainDashboard;
 
-export default CaptainDashboard;
