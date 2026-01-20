@@ -1,21 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   Users,
-  FileCheck,
-  Clock,
+  FileText,
   CheckCircle,
   XCircle,
   LogOut,
   Search,
-  Filter,
   Eye,
-  Shield,
   Car,
   AlertCircle,
-  ChevronDown,
-  X
+  X,
+  Clock,
+  RefreshCw,
+  ChevronRight,
+  BadgeCheck,
+  ShieldAlert,
+  BarChart3
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -23,29 +24,31 @@ import api from '../../services/api';
 type DocumentType = 'LICENSE' | 'INSURANCE' | 'RC' | 'AADHAR' | 'PAN';
 type DocumentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 type CaptainFilter = 'all' | 'verified' | 'unverified' | 'pending';
+type Tab = 'overview' | 'captains' | 'documents';
 
 interface Captain {
   id: number;
-  userId: number;
+  isVerified: boolean;
+  isOnline: boolean;
   vehicleType: string;
   vehicleNumber: string;
-  isAvailable: boolean;
-  isVerified: boolean;
+  vehicleModel?: string;
+  rating?: number;
+  totalRides?: number;
   user: {
     id: number;
+    fullName: string;
     email: string;
-    firstName: string;
-    lastName: string;
-    phone: string;
+    phone?: string;
   };
   documents: {
     id: number;
     documentType: DocumentType;
     status: DocumentStatus;
   }[];
-  _count: {
-    documents: number;
-  };
+  documentsCount: number;
+  pendingDocsCount: number;
+  verifiedDocsCount: number;
 }
 
 interface PendingDocument {
@@ -53,27 +56,34 @@ interface PendingDocument {
   documentType: DocumentType;
   documentUrl: string;
   status: DocumentStatus;
-  createdAt: string;
+  uploadedAt: string;
   captain: {
     id: number;
-    vehicleType: string;
     vehicleNumber: string;
     user: {
-      firstName: string;
-      lastName: string;
+      fullName: string;
       email: string;
+      phone?: string;
     };
   };
 }
 
-interface DashboardStats {
-  totalCaptains: number;
-  verifiedCaptains: number;
-  pendingVerifications: number;
-  totalDocuments: number;
-  pendingDocuments: number;
-  verifiedDocuments: number;
-  rejectedDocuments: number;
+interface Stats {
+  users: {
+    totalRiders: number;
+    totalCaptains: number;
+    verifiedCaptains: number;
+    unverifiedCaptains: number;
+    onlineCaptains: number;
+  };
+  documents: {
+    pendingReview: number;
+  };
+  rides: {
+    today: number;
+    totalCompleted: number;
+    totalRevenue: number;
+  };
 }
 
 const DOCUMENT_LABELS: Record<DocumentType, string> = {
@@ -86,8 +96,8 @@ const DOCUMENT_LABELS: Record<DocumentType, string> = {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'overview' | 'captains' | 'documents'>('overview');
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [stats, setStats] = useState<Stats | null>(null);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,29 +106,49 @@ export default function AdminDashboard() {
   const [selectedCaptain, setSelectedCaptain] = useState<Captain | null>(null);
   const [reviewingDoc, setReviewingDoc] = useState<PendingDocument | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchStats = useCallback(async () => {
     try {
-      setLoading(true);
-      const [statsRes, captainsRes, docsRes] = await Promise.all([
-        api.get('/admin/stats'),
-        api.get(`/admin/captains?filter=${captainFilter}`),
-        api.get('/admin/documents/pending')
-      ]);
-      setStats(statsRes.data);
-      setCaptains(captainsRes.data.captains || []);
-      setPendingDocs(docsRes.data.documents || []);
+      const res = await api.get('/admin/stats');
+      setStats(res.data);
     } catch (error) {
-      console.error('Error fetching admin data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
+      console.error('Error fetching stats:', error);
+    }
+  }, []);
+
+  const fetchCaptains = useCallback(async () => {
+    try {
+      const statusParam = captainFilter === 'all' ? '' : `?status=${captainFilter}`;
+      const res = await api.get(`/admin/captains${statusParam}`);
+      setCaptains(res.data.captains || []);
+    } catch (error) {
+      console.error('Error fetching captains:', error);
     }
   }, [captainFilter]);
 
+  const fetchPendingDocs = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/documents/pending');
+      setPendingDocs(res.data.documents || []);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    }
+  }, []);
+
+  const fetchAllData = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchStats(), fetchCaptains(), fetchPendingDocs()]);
+    setLoading(false);
+  }, [fetchStats, fetchCaptains, fetchPendingDocs]);
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchAllData();
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    fetchCaptains();
+  }, [captainFilter, fetchCaptains]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -126,98 +156,121 @@ export default function AdminDashboard() {
     navigate('/login');
   };
 
-  const handleReviewDocument = async (documentId: number, action: 'VERIFIED' | 'REJECTED') => {
-    if (action === 'REJECTED' && !rejectionReason.trim()) {
+  const handleReviewDocument = async (documentId: number, action: 'VERIFY' | 'REJECT') => {
+    if (action === 'REJECT' && !rejectionReason.trim()) {
       toast.error('Please provide a rejection reason');
       return;
     }
 
+    setActionLoading(true);
     try {
       await api.patch(`/admin/documents/${documentId}/review`, {
-        status: action,
-        rejectionReason: action === 'REJECTED' ? rejectionReason : undefined
+        action,
+        rejectionReason: action === 'REJECT' ? rejectionReason : undefined
       });
-      toast.success(`Document ${action.toLowerCase()}`);
+      toast.success(`Document ${action === 'VERIFY' ? 'verified' : 'rejected'} successfully`);
       setReviewingDoc(null);
       setRejectionReason('');
-      fetchData();
+      fetchAllData();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || 'Failed to review document');
+      toast.error(error.response?.data?.message || 'Action failed');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleToggleVerification = async (captainId: number, currentStatus: boolean) => {
+    setActionLoading(true);
     try {
-      await api.patch(`/admin/captains/${captainId}/verification`, {
+      await api.patch(`/admin/captains/${captainId}/verify`, {
         isVerified: !currentStatus
       });
-      toast.success(`Captain ${!currentStatus ? 'verified' : 'unverified'}`);
-      fetchData();
+      toast.success(`Captain ${!currentStatus ? 'verified' : 'unverified'} successfully`);
+      fetchCaptains();
+      fetchStats();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || 'Failed to update verification');
+      toast.error(error.response?.data?.message || 'Action failed');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const filteredCaptains = captains.filter(captain => {
     if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
     return (
-      captain.user.firstName.toLowerCase().includes(query) ||
-      captain.user.lastName.toLowerCase().includes(query) ||
-      captain.user.email.toLowerCase().includes(query) ||
-      captain.vehicleNumber.toLowerCase().includes(query)
+      captain.user.fullName?.toLowerCase().includes(q) ||
+      captain.user.email?.toLowerCase().includes(q) ||
+      captain.vehicleNumber?.toLowerCase().includes(q)
     );
   });
 
-  if (loading && !stats) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <RefreshCw className="w-8 h-8 text-gray-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-white">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-zinc-800 border-b border-zinc-700 px-6 py-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Shield className="text-amber-500" size={28} />
-            <h1 className="text-xl font-bold">Admin Dashboard</h1>
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">U</span>
+              </div>
+              <span className="font-semibold text-gray-900">Admin Panel</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={fetchAllData}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw size={18} />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+              >
+                <LogOut size={16} />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
-          >
-            <LogOut size={18} />
-            Logout
-          </button>
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="bg-zinc-800 border-b border-zinc-700">
-        <div className="max-w-7xl mx-auto px-6">
-          <nav className="flex gap-1">
-            {(['overview', 'captains', 'documents'] as const).map((tab) => (
+      {/* Tab Navigation */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex gap-8">
+            {[
+              { id: 'overview', label: 'Overview', icon: BarChart3 },
+              { id: 'captains', label: 'Captains', icon: Users },
+              { id: 'documents', label: 'Documents', icon: FileText },
+            ].map(({ id, label, icon: Icon }) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 font-medium capitalize transition-colors relative ${
-                  activeTab === tab
-                    ? 'text-white'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                key={id}
+                onClick={() => setActiveTab(id as Tab)}
+                className={`flex items-center gap-2 py-4 border-b-2 text-sm font-medium transition-colors ${
+                  activeTab === id
+                    ? 'border-black text-black'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {tab}
-                {activeTab === tab && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500"
-                  />
+                <Icon size={16} />
+                {label}
+                {id === 'documents' && pendingDocs.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
+                    {pendingDocs.length}
+                  </span>
                 )}
               </button>
             ))}
@@ -225,228 +278,236 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Overview Tab */}
         {activeTab === 'overview' && stats && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
-          >
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
-                icon={<Users size={24} />}
                 label="Total Captains"
-                value={stats.totalCaptains}
-                color="blue"
+                value={stats.users.totalCaptains}
+                icon={<Users className="text-gray-400" size={20} />}
               />
               <StatCard
-                icon={<CheckCircle size={24} />}
-                label="Verified Captains"
-                value={stats.verifiedCaptains}
-                color="green"
+                label="Verified"
+                value={stats.users.verifiedCaptains}
+                icon={<BadgeCheck className="text-green-500" size={20} />}
+                highlight="green"
               />
               <StatCard
-                icon={<Clock size={24} />}
-                label="Pending Verifications"
-                value={stats.pendingVerifications}
-                color="amber"
+                label="Unverified"
+                value={stats.users.unverifiedCaptains}
+                icon={<ShieldAlert className="text-orange-500" size={20} />}
+                highlight="orange"
               />
               <StatCard
-                icon={<FileCheck size={24} />}
-                label="Total Documents"
-                value={stats.totalDocuments}
-                color="purple"
+                label="Online Now"
+                value={stats.users.onlineCaptains}
+                icon={<div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />}
               />
             </div>
 
-            {/* Document Stats */}
-            <div className="bg-zinc-800 rounded-2xl p-6 border border-zinc-700">
-              <h2 className="text-lg font-semibold mb-6">Document Statistics</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex items-center gap-4 p-4 bg-zinc-700/50 rounded-xl">
-                  <div className="p-3 bg-amber-500/20 rounded-xl">
-                    <Clock className="text-amber-500" size={24} />
-                  </div>
+            {/* Secondary Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">{stats.pendingDocuments}</p>
-                    <p className="text-sm text-zinc-400">Pending Review</p>
+                    <p className="text-sm text-gray-500">Total Riders</p>
+                    <p className="text-2xl font-semibold text-gray-900 mt-1">{stats.users.totalRiders}</p>
                   </div>
+                  <Users className="text-gray-300" size={32} />
                 </div>
-                <div className="flex items-center gap-4 p-4 bg-zinc-700/50 rounded-xl">
-                  <div className="p-3 bg-green-500/20 rounded-xl">
-                    <CheckCircle className="text-green-500" size={24} />
-                  </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">{stats.verifiedDocuments}</p>
-                    <p className="text-sm text-zinc-400">Verified</p>
+                    <p className="text-sm text-gray-500">Completed Rides</p>
+                    <p className="text-2xl font-semibold text-gray-900 mt-1">{stats.rides.totalCompleted}</p>
                   </div>
+                  <Car className="text-gray-300" size={32} />
                 </div>
-                <div className="flex items-center gap-4 p-4 bg-zinc-700/50 rounded-xl">
-                  <div className="p-3 bg-red-500/20 rounded-xl">
-                    <XCircle className="text-red-500" size={24} />
-                  </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">{stats.rejectedDocuments}</p>
-                    <p className="text-sm text-zinc-400">Rejected</p>
+                    <p className="text-sm text-gray-500">Total Revenue</p>
+                    <p className="text-2xl font-semibold text-gray-900 mt-1">₹{stats.rides.totalRevenue.toLocaleString()}</p>
                   </div>
+                  <span className="text-3xl text-gray-300">₹</span>
                 </div>
               </div>
             </div>
 
-            {/* Recent Pending Documents */}
+            {/* Pending Documents Alert */}
             {pendingDocs.length > 0 && (
-              <div className="bg-zinc-800 rounded-2xl p-6 border border-zinc-700">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold">Recent Pending Documents</h2>
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Clock className="text-orange-600" size={20} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">{pendingDocs.length} documents pending review</p>
+                      <p className="text-sm text-gray-500">Review documents to verify captains</p>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setActiveTab('documents')}
-                    className="text-amber-500 hover:text-amber-400 text-sm font-medium"
+                    className="flex items-center gap-1 text-orange-600 hover:text-orange-700 font-medium text-sm"
                   >
-                    View All →
+                    Review
+                    <ChevronRight size={16} />
                   </button>
-                </div>
-                <div className="space-y-4">
-                  {pendingDocs.slice(0, 3).map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between p-4 bg-zinc-700/50 rounded-xl"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="p-2 bg-amber-500/20 rounded-lg">
-                          <FileCheck className="text-amber-500" size={20} />
-                        </div>
-                        <div>
-                          <p className="font-medium">{DOCUMENT_LABELS[doc.documentType]}</p>
-                          <p className="text-sm text-zinc-400">
-                            {doc.captain.user.firstName} {doc.captain.user.lastName}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setReviewingDoc(doc)}
-                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-medium rounded-lg transition-colors"
-                      >
-                        Review
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
-          </motion.div>
+
+            {/* Recent Captains */}
+            <div className="bg-white rounded-xl border border-gray-200">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="font-medium text-gray-900">Recent Captains</h3>
+                <button
+                  onClick={() => setActiveTab('captains')}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  View all
+                </button>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {captains.slice(0, 5).map((captain) => (
+                  <div key={captain.id} className="px-5 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-medium text-gray-600">
+                          {captain.user.fullName?.charAt(0) || '?'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{captain.user.fullName}</p>
+                        <p className="text-sm text-gray-500">{captain.vehicleNumber}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                      captain.isVerified
+                        ? 'bg-green-50 text-green-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {captain.isVerified ? 'Verified' : 'Pending'}
+                    </span>
+                  </div>
+                ))}
+                {captains.length === 0 && (
+                  <p className="px-5 py-8 text-center text-gray-400">No captains yet</p>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Captains Tab */}
         {activeTab === 'captains' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-4">
+          <div className="space-y-4">
+            {/* Search & Filter */}
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search captains..."
+                  placeholder="Search by name, email, or vehicle..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-amber-500 transition-colors"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                 />
               </div>
-              <div className="relative">
-                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
-                <select
-                  value={captainFilter}
-                  onChange={(e) => setCaptainFilter(e.target.value as CaptainFilter)}
-                  className="pl-12 pr-10 py-3 bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-amber-500 appearance-none cursor-pointer"
-                >
-                  <option value="all">All Captains</option>
-                  <option value="verified">Verified</option>
-                  <option value="unverified">Unverified</option>
-                  <option value="pending">Pending Documents</option>
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={20} />
-              </div>
+              <select
+                value={captainFilter}
+                onChange={(e) => setCaptainFilter(e.target.value as CaptainFilter)}
+                className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent cursor-pointer"
+              >
+                <option value="all">All Captains</option>
+                <option value="verified">Verified</option>
+                <option value="unverified">Unverified</option>
+                <option value="pending">Pending Docs</option>
+              </select>
             </div>
 
-            {/* Captains List */}
-            <div className="bg-zinc-800 rounded-2xl border border-zinc-700 overflow-hidden">
+            {/* Captains Table */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-zinc-700/50">
-                    <tr>
-                      <th className="text-left px-6 py-4 text-sm font-medium text-zinc-400">Captain</th>
-                      <th className="text-left px-6 py-4 text-sm font-medium text-zinc-400">Vehicle</th>
-                      <th className="text-left px-6 py-4 text-sm font-medium text-zinc-400">Documents</th>
-                      <th className="text-left px-6 py-4 text-sm font-medium text-zinc-400">Status</th>
-                      <th className="text-left px-6 py-4 text-sm font-medium text-zinc-400">Actions</th>
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Captain</th>
+                      <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle</th>
+                      <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Documents</th>
+                      <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-700">
+                  <tbody className="divide-y divide-gray-100">
                     {filteredCaptains.map((captain) => (
-                      <tr key={captain.id} className="hover:bg-zinc-700/30">
-                        <td className="px-6 py-4">
-                          <div>
-                            <p className="font-medium">
-                              {captain.user.firstName} {captain.user.lastName}
-                            </p>
-                            <p className="text-sm text-zinc-400">{captain.user.email}</p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <Car size={18} className="text-zinc-400" />
-                            <div>
-                              <p className="font-medium">{captain.vehicleType}</p>
-                              <p className="text-sm text-zinc-400">{captain.vehicleNumber}</p>
+                      <tr key={captain.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
+                              <span className="text-sm font-medium text-gray-600">
+                                {captain.user.fullName?.charAt(0) || '?'}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 truncate">{captain.user.fullName}</p>
+                              <p className="text-sm text-gray-500 truncate">{captain.user.email}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-4">
+                          <p className="text-gray-900">{captain.vehicleType}</p>
+                          <p className="text-sm text-gray-500">{captain.vehicleNumber}</p>
+                        </td>
+                        <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm">
-                              {captain.documents.filter(d => d.status === 'VERIFIED').length}/5 verified
+                            <span className="text-sm text-gray-600">
+                              {captain.verifiedDocsCount}/{captain.documentsCount || 0}
                             </span>
-                            {captain.documents.some(d => d.status === 'PENDING') && (
-                              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-500 text-xs rounded-full">
-                                Pending
+                            {captain.pendingDocsCount > 0 && (
+                              <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">
+                                {captain.pendingDocsCount} pending
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-4">
                           {captain.isVerified ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-500 rounded-full text-sm">
-                              <CheckCircle size={14} />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full">
+                              <CheckCircle size={12} />
                               Verified
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-zinc-600 text-zinc-300 rounded-full text-sm">
-                              <AlertCircle size={14} />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                              <AlertCircle size={12} />
                               Unverified
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => setSelectedCaptain(captain)}
-                              className="p-2 hover:bg-zinc-600 rounded-lg transition-colors"
+                              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                               title="View Details"
                             >
-                              <Eye size={18} />
+                              <Eye size={16} />
                             </button>
                             <button
                               onClick={() => handleToggleVerification(captain.id, captain.isVerified)}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              disabled={actionLoading}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                                 captain.isVerified
-                                  ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
-                                  : 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
-                              }`}
+                                  ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                                  : 'bg-green-50 text-green-600 hover:bg-green-100'
+                              } disabled:opacity-50`}
                             >
                               {captain.isVerified ? 'Revoke' : 'Verify'}
                             </button>
@@ -457,214 +518,198 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
                 {filteredCaptains.length === 0 && (
-                  <div className="text-center py-12 text-zinc-400">
-                    No captains found
+                  <div className="py-12 text-center text-gray-400">
+                    <Users className="mx-auto mb-2" size={32} />
+                    <p>No captains found</p>
                   </div>
                 )}
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Documents Tab */}
         {activeTab === 'documents' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <h2 className="text-xl font-semibold">Pending Document Reviews</h2>
-            
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Pending Documents</h2>
+              <span className="text-sm text-gray-500">{pendingDocs.length} documents</span>
+            </div>
+
             {pendingDocs.length === 0 ? (
-              <div className="bg-zinc-800 rounded-2xl p-12 border border-zinc-700 text-center">
-                <CheckCircle className="mx-auto text-green-500 mb-4" size={48} />
-                <p className="text-lg font-medium">All caught up!</p>
-                <p className="text-zinc-400">No documents pending review</p>
+              <div className="bg-white rounded-xl border border-gray-200 py-16 text-center">
+                <CheckCircle className="mx-auto text-green-500 mb-3" size={40} />
+                <p className="font-medium text-gray-900">All caught up!</p>
+                <p className="text-sm text-gray-500 mt-1">No documents pending review</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pendingDocs.map((doc) => (
-                  <motion.div
+                  <div
                     key={doc.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-zinc-800 rounded-2xl p-6 border border-zinc-700"
+                    className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-sm transition-shadow"
                   >
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 bg-amber-500/20 rounded-xl">
-                        <FileCheck className="text-amber-500" size={24} />
+                      <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
+                        <FileText className="text-orange-500" size={20} />
                       </div>
-                      <span className="px-3 py-1 bg-amber-500/20 text-amber-500 text-xs font-medium rounded-full">
+                      <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded">
                         Pending
                       </span>
                     </div>
                     
-                    <h3 className="font-semibold text-lg mb-1">
+                    <h3 className="font-medium text-gray-900 mb-1">
                       {DOCUMENT_LABELS[doc.documentType]}
                     </h3>
                     
-                    <div className="space-y-2 mb-4">
-                      <p className="text-zinc-400">
-                        <span className="text-zinc-500">Captain:</span>{' '}
-                        {doc.captain.user.firstName} {doc.captain.user.lastName}
-                      </p>
-                      <p className="text-zinc-400">
-                        <span className="text-zinc-500">Vehicle:</span>{' '}
-                        {doc.captain.vehicleNumber}
-                      </p>
-                      <p className="text-zinc-400 text-sm">
-                        Submitted {new Date(doc.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
+                    <p className="text-sm text-gray-600 mb-1">{doc.captain.user.fullName}</p>
+                    <p className="text-xs text-gray-400 mb-4">
+                      {doc.captain.vehicleNumber} • {new Date(doc.uploadedAt).toLocaleDateString()}
+                    </p>
 
                     <button
                       onClick={() => setReviewingDoc(doc)}
-                      className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-xl transition-colors"
+                      className="w-full py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
                     >
                       Review Document
                     </button>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             )}
-          </motion.div>
+          </div>
         )}
       </main>
 
       {/* Document Review Modal */}
       {reviewingDoc && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-zinc-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
-          >
-            <div className="p-6 border-b border-zinc-700 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Review Document</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-xl">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Review Document</h2>
               <button
                 onClick={() => {
                   setReviewingDoc(null);
                   setRejectionReason('');
                 }}
-                className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X size={20} />
+                <X size={18} className="text-gray-400" />
               </button>
             </div>
             
-            <div className="p-6 space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-amber-500/20 rounded-xl">
-                    <FileCheck className="text-amber-500" size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">{DOCUMENT_LABELS[reviewingDoc.documentType]}</h3>
-                    <p className="text-sm text-zinc-400">
-                      {reviewingDoc.captain.user.firstName} {reviewingDoc.captain.user.lastName}
-                    </p>
-                  </div>
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+                  <FileText className="text-orange-500" size={20} />
                 </div>
-
-                <div className="p-4 bg-zinc-700/50 rounded-xl space-y-2">
-                  <p className="text-sm text-zinc-400">
-                    <span className="text-zinc-500">Email:</span>{' '}
-                    {reviewingDoc.captain.user.email}
-                  </p>
-                  <p className="text-sm text-zinc-400">
-                    <span className="text-zinc-500">Vehicle:</span>{' '}
-                    {reviewingDoc.captain.vehicleType} - {reviewingDoc.captain.vehicleNumber}
-                  </p>
-                  <p className="text-sm text-zinc-400">
-                    <span className="text-zinc-500">Submitted:</span>{' '}
-                    {new Date(reviewingDoc.createdAt).toLocaleString()}
-                  </p>
-                </div>
-
-                {/* Document Preview Placeholder */}
-                <div className="aspect-video bg-zinc-700 rounded-xl flex items-center justify-center">
-                  <div className="text-center text-zinc-400">
-                    <FileCheck size={48} className="mx-auto mb-2" />
-                    <p className="text-sm">Document Preview</p>
-                    <p className="text-xs text-zinc-500">(In production, display actual document)</p>
-                  </div>
-                </div>
-
-                {/* Rejection Reason */}
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                    Rejection Reason (required if rejecting)
-                  </label>
-                  <textarea
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="Enter reason for rejection..."
-                    className="w-full px-4 py-3 bg-zinc-700 border border-zinc-600 rounded-xl focus:outline-none focus:border-amber-500 resize-none"
-                    rows={3}
-                  />
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900">{DOCUMENT_LABELS[reviewingDoc.documentType]}</p>
+                  <p className="text-sm text-gray-500 truncate">{reviewingDoc.captain.user.fullName}</p>
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Email</span>
+                  <span className="text-gray-900">{reviewingDoc.captain.user.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Vehicle</span>
+                  <span className="text-gray-900">{reviewingDoc.captain.vehicleNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Submitted</span>
+                  <span className="text-gray-900">{new Date(reviewingDoc.uploadedAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+
+              {/* Document Preview */}
+              <div className="aspect-4/3 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden">
+                {reviewingDoc.documentUrl && !reviewingDoc.documentUrl.includes('...') ? (
+                  <img
+                    src={reviewingDoc.documentUrl}
+                    alt="Document"
+                    className="max-w-full max-h-full object-contain"
+                  />
+                ) : (
+                  <div className="text-center">
+                    <FileText className="mx-auto text-gray-300 mb-2" size={32} />
+                    <p className="text-xs text-gray-400">Preview not available</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Rejection Reason */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Rejection reason <span className="text-gray-400 font-normal">(required if rejecting)</span>
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Enter reason..."
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                  rows={2}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
                 <button
-                  onClick={() => handleReviewDocument(reviewingDoc.id, 'REJECTED')}
-                  className="flex-1 py-3 bg-red-500/20 text-red-500 hover:bg-red-500/30 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                  onClick={() => handleReviewDocument(reviewingDoc.id, 'REJECT')}
+                  disabled={actionLoading}
+                  className="flex-1 py-2.5 border border-red-200 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  <XCircle size={20} />
+                  <XCircle size={16} />
                   Reject
                 </button>
                 <button
-                  onClick={() => handleReviewDocument(reviewingDoc.id, 'VERIFIED')}
-                  className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                  onClick={() => handleReviewDocument(reviewingDoc.id, 'VERIFY')}
+                  disabled={actionLoading}
+                  className="flex-1 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  <CheckCircle size={20} />
+                  <CheckCircle size={16} />
                   Verify
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
 
       {/* Captain Details Modal */}
       {selectedCaptain && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-zinc-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
-          >
-            <div className="p-6 border-b border-zinc-700 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Captain Details</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white">
+              <h2 className="font-semibold text-gray-900">Captain Details</h2>
               <button
                 onClick={() => setSelectedCaptain(null)}
-                className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X size={20} />
+                <X size={18} className="text-gray-400" />
               </button>
             </div>
             
-            <div className="p-6 space-y-6">
-              {/* Captain Info */}
+            <div className="p-5 space-y-5">
+              {/* Profile */}
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-zinc-700 rounded-full flex items-center justify-center">
-                  <span className="text-2xl font-bold">
-                    {selectedCaptain.user.firstName[0]}{selectedCaptain.user.lastName[0]}
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center">
+                  <span className="text-xl font-semibold text-gray-600">
+                    {selectedCaptain.user.fullName?.charAt(0) || '?'}
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">
-                    {selectedCaptain.user.firstName} {selectedCaptain.user.lastName}
-                  </h3>
-                  <p className="text-zinc-400">{selectedCaptain.user.email}</p>
+                  <h3 className="font-semibold text-gray-900">{selectedCaptain.user.fullName}</h3>
+                  <p className="text-sm text-gray-500">{selectedCaptain.user.email}</p>
                   {selectedCaptain.isVerified ? (
-                    <span className="inline-flex items-center gap-1 text-green-500 text-sm">
-                      <CheckCircle size={14} />
+                    <span className="inline-flex items-center gap-1 text-green-600 text-xs mt-1">
+                      <CheckCircle size={12} />
                       Verified Captain
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-zinc-400 text-sm">
-                      <AlertCircle size={14} />
+                    <span className="inline-flex items-center gap-1 text-gray-500 text-xs mt-1">
+                      <AlertCircle size={12} />
                       Not Verified
                     </span>
                   )}
@@ -672,24 +717,30 @@ export default function AdminDashboard() {
               </div>
 
               {/* Vehicle Info */}
-              <div className="p-4 bg-zinc-700/50 rounded-xl">
-                <h4 className="font-medium mb-3 flex items-center gap-2">
-                  <Car size={18} />
-                  Vehicle Information
+              <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Car size={16} />
+                  Vehicle Details
                 </h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-zinc-500">Type</p>
-                    <p className="font-medium">{selectedCaptain.vehicleType}</p>
+                    <p className="text-gray-400">Type</p>
+                    <p className="font-medium text-gray-900">{selectedCaptain.vehicleType}</p>
                   </div>
                   <div>
-                    <p className="text-zinc-500">Number</p>
-                    <p className="font-medium">{selectedCaptain.vehicleNumber}</p>
+                    <p className="text-gray-400">Number</p>
+                    <p className="font-medium text-gray-900">{selectedCaptain.vehicleNumber}</p>
                   </div>
+                  {selectedCaptain.vehicleModel && (
+                    <div>
+                      <p className="text-gray-400">Model</p>
+                      <p className="font-medium text-gray-900">{selectedCaptain.vehicleModel}</p>
+                    </div>
+                  )}
                   <div>
-                    <p className="text-zinc-500">Status</p>
-                    <p className={`font-medium ${selectedCaptain.isAvailable ? 'text-green-500' : 'text-zinc-400'}`}>
-                      {selectedCaptain.isAvailable ? 'Online' : 'Offline'}
+                    <p className="text-gray-400">Status</p>
+                    <p className={`font-medium ${selectedCaptain.isOnline ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedCaptain.isOnline ? 'Online' : 'Offline'}
                     </p>
                   </div>
                 </div>
@@ -697,32 +748,32 @@ export default function AdminDashboard() {
 
               {/* Documents */}
               <div>
-                <h4 className="font-medium mb-3 flex items-center gap-2">
-                  <FileCheck size={18} />
-                  Documents ({selectedCaptain.documents.filter(d => d.status === 'VERIFIED').length}/5 Verified)
+                <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <FileText size={16} />
+                  Documents ({selectedCaptain.verifiedDocsCount}/{selectedCaptain.documentsCount || 0})
                 </h4>
                 <div className="space-y-2">
                   {(['LICENSE', 'INSURANCE', 'RC', 'AADHAR', 'PAN'] as DocumentType[]).map((type) => {
-                    const doc = selectedCaptain.documents.find(d => d.documentType === type);
+                    const doc = selectedCaptain.documents?.find(d => d.documentType === type);
                     return (
                       <div
                         key={type}
-                        className="flex items-center justify-between p-3 bg-zinc-700/50 rounded-lg"
+                        className="flex items-center justify-between py-2.5 px-3 bg-gray-50 rounded-lg"
                       >
-                        <span className="text-sm">{DOCUMENT_LABELS[type]}</span>
+                        <span className="text-sm text-gray-700">{DOCUMENT_LABELS[type]}</span>
                         {doc ? (
-                          <span className={`text-xs px-2 py-1 rounded-full ${
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                             doc.status === 'VERIFIED'
-                              ? 'bg-green-500/20 text-green-500'
+                              ? 'bg-green-100 text-green-700'
                               : doc.status === 'PENDING'
-                              ? 'bg-amber-500/20 text-amber-500'
-                              : 'bg-red-500/20 text-red-500'
+                              ? 'bg-orange-100 text-orange-700'
+                              : 'bg-red-100 text-red-700'
                           }`}>
                             {doc.status}
                           </span>
                         ) : (
-                          <span className="text-xs px-2 py-1 bg-zinc-600 text-zinc-400 rounded-full">
-                            Not Uploaded
+                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">
+                            Not uploaded
                           </span>
                         )}
                       </div>
@@ -731,62 +782,52 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* Action */}
               <button
                 onClick={() => {
                   handleToggleVerification(selectedCaptain.id, selectedCaptain.isVerified);
                   setSelectedCaptain(null);
                 }}
-                className={`w-full py-3 font-semibold rounded-xl transition-colors ${
+                disabled={actionLoading}
+                className={`w-full py-3 text-sm font-medium rounded-xl transition-colors disabled:opacity-50 ${
                   selectedCaptain.isVerified
-                    ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
-                    : 'bg-green-500 text-white hover:bg-green-600'
+                    ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                    : 'bg-green-600 text-white hover:bg-green-700'
                 }`}
               >
                 {selectedCaptain.isVerified ? 'Revoke Verification' : 'Verify Captain'}
               </button>
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// Stat Card Component
 function StatCard({ 
-  icon, 
   label, 
   value, 
-  color 
+  icon,
+  highlight
 }: { 
-  icon: React.ReactNode; 
   label: string; 
   value: number; 
-  color: 'blue' | 'green' | 'amber' | 'purple';
+  icon: React.ReactNode;
+  highlight?: 'green' | 'orange';
 }) {
-  const colorClasses = {
-    blue: 'bg-blue-500/20 text-blue-500',
-    green: 'bg-green-500/20 text-green-500',
-    amber: 'bg-amber-500/20 text-amber-500',
-    purple: 'bg-purple-500/20 text-purple-500',
-  };
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-zinc-800 rounded-2xl p-6 border border-zinc-700"
-    >
-      <div className="flex items-center gap-4">
-        <div className={`p-3 rounded-xl ${colorClasses[color]}`}>
-          {icon}
-        </div>
-        <div>
-          <p className="text-3xl font-bold">{value}</p>
-          <p className="text-sm text-zinc-400">{label}</p>
-        </div>
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center justify-between mb-3">
+        {icon}
+        {highlight && (
+          <div className={`w-2 h-2 rounded-full ${
+            highlight === 'green' ? 'bg-green-500' : 'bg-orange-500'
+          }`} />
+        )}
       </div>
-    </motion.div>
+      <p className="text-2xl font-semibold text-gray-900">{value}</p>
+      <p className="text-sm text-gray-500 mt-1">{label}</p>
+    </div>
   );
 }
