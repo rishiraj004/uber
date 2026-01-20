@@ -240,11 +240,16 @@ const CaptainDashboard = () => {
           location: { latitude: currentLocation[0], longitude: currentLocation[1] }
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error toggling status", error);
-      if (error.response?.data?.redirectTo) {
-        toast.error(error.response.data.message || 'Verification required');
-        navigate(error.response.data.redirectTo);
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { redirectTo?: string; message?: string } } };
+        if (axiosError.response?.data?.redirectTo) {
+          toast.error(axiosError.response.data.message || 'Verification required');
+          navigate(axiosError.response.data.redirectTo);
+        } else {
+          toast.error("Could not update status");
+        }
       } else {
         toast.error("Could not update status");
       }
@@ -347,7 +352,7 @@ const CaptainDashboard = () => {
               }
             `}
           >
-            <Power size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <Power size={16} className="sm:w-4.5 sm:h-4.5" />
             <span className="hidden sm:inline">{isOnline ? 'Go Offline' : 'Go Online'}</span>
           </button>
           {/* Mobile menu toggle for stats */}

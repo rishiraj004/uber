@@ -347,7 +347,7 @@ const RiderTracking = () => {
              onClick={() => RideCancelled(rideData?.rideId || rideData?.id)}
              className="flex items-center gap-1.5 sm:gap-2 text-red-600 font-bold text-xs sm:text-sm hover:opacity-70 transition-opacity"
            >
-             <XCircle size={16} className="sm:w-[18px] sm:h-[18px]" /> Cancel Ride
+             <XCircle size={16} className="sm:w-4.5 sm:h-4.5" /> Cancel Ride
            </button>
            <p className="text-[8px] sm:text-[9px] font-black text-gray-300 tracking-widest uppercase">ID: #{rideData?.rideId || rideData?.id || '48291'}</p>
         </div>

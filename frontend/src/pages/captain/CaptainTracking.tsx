@@ -233,7 +233,7 @@ const CaptainTracking = () => {
       {/* Status Bar - Top */}
       <div className="absolute top-0 left-0 right-0 z-20">
         <div className={`${statusConfig.color} px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-center gap-2`}>
-          <statusConfig.icon size={16} className="sm:w-[18px] sm:h-[18px] text-white" />
+          <statusConfig.icon size={16} className="sm:w-4.5 sm:h-4.5 text-white" />
           <span className="text-white font-semibold text-sm sm:text-base">{statusConfig.label}</span>
         </div>
       </div>
@@ -423,7 +423,7 @@ const CaptainTracking = () => {
               onClick={() => setIsEmergencyOpen(true)}
               className="w-full flex items-center justify-center gap-2 text-red-500 font-semibold text-xs sm:text-sm py-2.5 sm:py-3 hover:bg-red-50 rounded-xl transition-colors"
             >
-              <ShieldAlert size={16} className="sm:w-[18px] sm:h-[18px]" />
+              <ShieldAlert size={16} className="sm:w-4.5 sm:h-4.5" />
               Emergency Support
             </button>
           </div>

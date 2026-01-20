@@ -556,7 +556,7 @@ const RiderDashboard: React.FC = () => {
                 {/* Error Message */}
                 {error && (
                     <div className="mx-4 sm:mx-6 mb-3 sm:mb-4 px-3 sm:px-4 py-2.5 sm:py-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 sm:gap-3">
-                        <X size={16} className="sm:w-[18px] sm:h-[18px] text-red-500" />
+                        <X size={16} className="sm:w-4.5 sm:h-4.5 text-red-500" />
                         <span className="text-xs sm:text-sm text-red-700">{error}</span>
                     </div>
                 )}

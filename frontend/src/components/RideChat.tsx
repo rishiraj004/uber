@@ -220,7 +220,7 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute bottom-0 left-0 right-0 sm:left-auto sm:right-4 sm:bottom-4 bg-white sm:w-96 h-[75vh] sm:h-[500px] sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden flex flex-col"
+          className="absolute bottom-0 left-0 right-0 sm:left-auto sm:right-4 sm:bottom-4 bg-white sm:w-96 h-[75vh] sm:h-125 sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="bg-zinc-900 text-white p-3 sm:p-4 flex items-center justify-between shrink-0">
@@ -320,7 +320,7 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
               disabled={!newMessage.trim() || sending}
               className="p-2.5 sm:p-3 bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Send size={16} className="sm:w-[18px] sm:h-[18px]" />
+              <Send size={16} className="sm:w-4.5 sm:h-4.5" />
             </button>
           </div>
         </div>
