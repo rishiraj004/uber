@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle, Ruler, Clock } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../../services/api';
 import RatingModal from '../../components/RatingModal';
 
@@ -95,7 +95,7 @@ const Receipt = () => {
                     isOpen={showRatingModal}
                     onClose={() => setShowRatingModal(false)}
                     onSubmit={handleRatingSubmit}
-                    rideId={rideId}
+                    rideId={rideId || 0}
                     recipientName={ride?.captainName || 'Your Captain'}
                     reviewType="RIDER_TO_CAPTAIN"
                     title="Rate Your Ride"

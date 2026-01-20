@@ -209,48 +209,56 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        className="fixed inset-0 z-50 flex flex-col bg-white md:inset-auto md:bottom-4 md:right-4 md:w-96 md:h-125 md:rounded-2xl md:shadow-2xl overflow-hidden"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
       >
-        {/* Header */}
-        <div className="bg-zinc-900 text-white p-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-              <span className="text-lg font-bold">{recipientName.charAt(0)}</span>
+        <motion.div
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="absolute bottom-0 left-0 right-0 sm:left-auto sm:right-4 sm:bottom-4 bg-white sm:w-96 h-[75vh] sm:h-[500px] sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden flex flex-col"
+        >
+          {/* Header */}
+          <div className="bg-zinc-900 text-white p-3 sm:p-4 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
+                <span className="text-sm sm:text-lg font-bold">{recipientName.charAt(0)}</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm sm:text-base">{recipientName}</h3>
+                <p className="text-[10px] sm:text-xs text-white/70">
+                  {isTyping ? 'Typing...' : recipientRole === 'CAPTAIN' ? 'Your Captain' : 'Your Rider'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold">{recipientName}</h3>
-              <p className="text-xs text-white/70">
-                {isTyping ? 'Typing...' : recipientRole === 'CAPTAIN' ? 'Your Captain' : 'Your Rider'}
-              </p>
-            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <X size={18} className="sm:w-5 sm:h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 bg-gray-50">
           {loading ? (
             <div className="flex items-center justify-center h-full">
-              <div className="w-6 h-6 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                <Send size={24} className="text-gray-300" />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded-full flex items-center justify-center mb-2 sm:mb-3">
+                <Send size={20} className="sm:w-6 sm:h-6 text-gray-300" />
               </div>
-              <p className="text-sm">No messages yet</p>
-              <p className="text-xs mt-1">Start the conversation!</p>
+              <p className="text-xs sm:text-sm">No messages yet</p>
+              <p className="text-[10px] sm:text-xs mt-1">Start the conversation!</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {messages.map((msg, index) => (
                 <motion.div
                   key={msg.id || index}
@@ -259,14 +267,14 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
                   className={`flex ${msg.isOwn ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                    className={`max-w-[80%] rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 ${
                       msg.isOwn
                         ? 'bg-zinc-900 text-white rounded-br-md'
                         : 'bg-white text-gray-900 shadow-sm rounded-bl-md'
                     }`}
                   >
-                    <p className="text-sm leading-relaxed">{msg.message}</p>
-                    <p className={`text-[10px] mt-1 ${msg.isOwn ? 'text-white/50' : 'text-gray-400'}`}>
+                    <p className="text-xs sm:text-sm leading-relaxed">{msg.message}</p>
+                    <p className={`text-[9px] sm:text-[10px] mt-1 ${msg.isOwn ? 'text-white/50' : 'text-gray-400'}`}>
                       {formatTime(msg.createdAt)}
                     </p>
                   </div>
@@ -280,11 +288,11 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
                   animate={{ opacity: 1, y: 0 }}
                   className="flex justify-start"
                 >
-                  <div className="bg-white shadow-sm rounded-2xl rounded-bl-md px-4 py-3">
+                  <div className="bg-white shadow-sm rounded-2xl rounded-bl-md px-3 sm:px-4 py-2.5 sm:py-3">
                     <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
                   </div>
                 </motion.div>
@@ -296,7 +304,7 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
         </div>
 
         {/* Input */}
-        <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+        <div className="p-3 sm:p-4 bg-white border-t border-gray-100 shrink-0">
           <div className="flex items-center gap-2">
             <input
               ref={inputRef}
@@ -305,17 +313,18 @@ const RideChat = ({ isOpen, onClose, rideId, recipientName, recipientRole }: Rid
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               placeholder="Type a message..."
-              className="flex-1 px-4 py-3 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+              className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-100 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
             />
             <button
               onClick={handleSendMessage}
               disabled={!newMessage.trim() || sending}
-              className="p-3 bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-2.5 sm:p-3 bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Send size={18} />
+              <Send size={16} className="sm:w-[18px] sm:h-[18px]" />
             </button>
           </div>
         </div>
+        </motion.div>
       </motion.div>
     </AnimatePresence>
   );

@@ -1,7 +1,7 @@
 import axios from "axios";
 import api from "../../services/api";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Car, Bike, Zap, Clock, Route, LogOut, X, ChevronRight, User, History, Home, Briefcase } from 'lucide-react';
+import { Car, Bike, Zap, Clock, Route, LogOut, X, ChevronRight, User, History, Home, Briefcase, Map } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../../context/socket-context";
 import AddressAutocomplete from "../../components/AddressAutocomplete";
@@ -369,43 +369,100 @@ const RiderDashboard: React.FC = () => {
 
     const showVehicleOptions = pickupCoords && dropoffCoords && fares.CAR > 0;
 
+    // State for mobile map toggle
+    const [showMobileMap, setShowMobileMap] = useState(false);
+
     return (
         <div className="h-screen w-screen flex flex-col md:flex-row bg-zinc-50 overflow-hidden">
+            {/* Mobile Map View Overlay */}
+            {showMobileMap && (
+                <div className="fixed inset-0 z-50 md:hidden bg-white">
+                    <div className="h-full w-full relative">
+                        {pickupCoords && dropoffCoords ? (
+                            <RideMap
+                                pickup={[pickupCoords.lat, pickupCoords.lng]}
+                                dropoff={[dropoffCoords.lat, dropoffCoords.lng]}
+                                path={[]}
+                            />
+                        ) : (
+                            <div className="h-full w-full bg-zinc-100 flex items-center justify-center">
+                                <p className="text-zinc-500">Select pickup and destination first</p>
+                            </div>
+                        )}
+                        <button
+                            onClick={() => setShowMobileMap(false)}
+                            className="absolute top-4 left-4 p-3 bg-white rounded-xl shadow-lg"
+                        >
+                            <X size={20} />
+                        </button>
+                        {/* Route info overlay on map */}
+                        {routeInfo && (
+                            <div className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl shadow-lg p-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2 text-zinc-600">
+                                            <Route size={16} />
+                                            <span className="text-sm font-medium">{routeInfo.distance} km</span>
+                                        </div>
+                                        <div className="w-1 h-1 bg-zinc-300 rounded-full" />
+                                        <div className="flex items-center gap-2 text-zinc-600">
+                                            <Clock size={16} />
+                                            <span className="text-sm font-medium">{Math.round(routeInfo.duration)} min</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-lg font-bold text-zinc-900">₹{fares[vehicleType]}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Left Panel - Inputs & Selection */}
             <div className="w-full md:w-105 bg-white h-full shadow-xl z-10 flex flex-col">
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-zinc-100 flex items-center justify-between">
+                <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-zinc-100 flex items-center justify-between">
                     <div>
-                        <h1 className="text-xl font-bold text-zinc-900">Book a ride</h1>
-                        <p className="text-sm text-zinc-500 mt-0.5">Get where you need to go</p>
+                        <h1 className="text-lg sm:text-xl font-bold text-zinc-900">Book a ride</h1>
+                        <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">Get where you need to go</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                        {/* Mobile Map Button */}
+                        {pickupCoords && dropoffCoords && (
+                            <button
+                                onClick={() => setShowMobileMap(true)}
+                                className="p-2 sm:p-2.5 hover:bg-zinc-100 rounded-xl transition-colors md:hidden"
+                                title="View Map"
+                            >
+                                <Map size={20} className="text-blue-600" />
+                            </button>
+                        )}
                         <button
                             onClick={() => navigate('/ride-history')}
-                            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+                            className="p-2 sm:p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
                             title="Ride History"
                         >
-                            <History size={20} className="text-zinc-500" />
+                            <History size={18} className="sm:w-5 sm:h-5 text-zinc-500" />
                         </button>
                         <button
                             onClick={() => navigate('/profile')}
-                            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+                            className="p-2 sm:p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
                             title="Profile"
                         >
-                            <User size={20} className="text-zinc-500" />
+                            <User size={18} className="sm:w-5 sm:h-5 text-zinc-500" />
                         </button>
                         <button
                             onClick={handleLogout}
-                            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+                            className="p-2 sm:p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
                             title="Logout"
                         >
-                            <LogOut size={20} className="text-zinc-500" />
+                            <LogOut size={18} className="sm:w-5 sm:h-5 text-zinc-500" />
                         </button>
                     </div>
                 </div>
 
                 {/* Location Inputs */}
-                <div className="px-6 py-5 space-y-3">
+                <div className="px-4 sm:px-6 py-4 sm:py-5 space-y-3">
                     {/* Visual connection line */}
                     <div className="relative">
                         <div className="absolute left-4.75 top-13 w-0.5 h-8 bg-zinc-200 z-10" />
@@ -433,15 +490,15 @@ const RiderDashboard: React.FC = () => {
 
                     {/* Route Info */}
                     {routeInfo && (
-                        <div className="flex items-center gap-4 px-4 py-3 bg-zinc-50 rounded-xl">
-                            <div className="flex items-center gap-2 text-zinc-600">
-                                <Route size={16} />
-                                <span className="text-sm font-medium">{routeInfo.distance} km</span>
+                        <div className="flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-2.5 sm:py-3 bg-zinc-50 rounded-xl">
+                            <div className="flex items-center gap-1.5 sm:gap-2 text-zinc-600">
+                                <Route size={14} className="sm:w-4 sm:h-4" />
+                                <span className="text-xs sm:text-sm font-medium">{routeInfo.distance} km</span>
                             </div>
                             <div className="w-1 h-1 bg-zinc-300 rounded-full" />
-                            <div className="flex items-center gap-2 text-zinc-600">
-                                <Clock size={16} />
-                                <span className="text-sm font-medium">{Math.round(routeInfo.duration)} min</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 text-zinc-600">
+                                <Clock size={14} className="sm:w-4 sm:h-4" />
+                                <span className="text-xs sm:text-sm font-medium">{Math.round(routeInfo.duration)} min</span>
                             </div>
                         </div>
                     )}
@@ -460,14 +517,14 @@ const RiderDashboard: React.FC = () => {
                                                 lng: savedAddresses.homeAddressLng!
                                             });
                                         }}
-                                        className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
+                                        className="flex-1 flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
                                     >
-                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                            <Home size={16} className="text-blue-600" />
+                                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                                            <Home size={14} className="sm:w-4 sm:h-4 text-blue-600" />
                                         </div>
-                                        <div className="text-left overflow-hidden">
-                                            <p className="text-sm font-medium text-zinc-900">Home</p>
-                                            <p className="text-xs text-zinc-500 truncate max-w-25">{savedAddresses.homeAddress}</p>
+                                        <div className="text-left overflow-hidden min-w-0">
+                                            <p className="text-xs sm:text-sm font-medium text-zinc-900">Home</p>
+                                            <p className="text-[10px] sm:text-xs text-zinc-500 truncate">{savedAddresses.homeAddress}</p>
                                         </div>
                                     </button>
                                 )}
@@ -480,14 +537,14 @@ const RiderDashboard: React.FC = () => {
                                                 lng: savedAddresses.workAddressLng!
                                             });
                                         }}
-                                        className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
+                                        className="flex-1 flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
                                     >
-                                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                                            <Briefcase size={16} className="text-purple-600" />
+                                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
+                                            <Briefcase size={14} className="sm:w-4 sm:h-4 text-purple-600" />
                                         </div>
-                                        <div className="text-left overflow-hidden">
-                                            <p className="text-sm font-medium text-zinc-900">Work</p>
-                                            <p className="text-xs text-zinc-500 truncate max-w-25">{savedAddresses.workAddress}</p>
+                                        <div className="text-left overflow-hidden min-w-0">
+                                            <p className="text-xs sm:text-sm font-medium text-zinc-900">Work</p>
+                                            <p className="text-[10px] sm:text-xs text-zinc-500 truncate">{savedAddresses.workAddress}</p>
                                         </div>
                                     </button>
                                 )}
@@ -498,19 +555,19 @@ const RiderDashboard: React.FC = () => {
 
                 {/* Error Message */}
                 {error && (
-                    <div className="mx-6 mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
-                        <X size={18} className="text-red-500" />
-                        <span className="text-sm text-red-700">{error}</span>
+                    <div className="mx-4 sm:mx-6 mb-3 sm:mb-4 px-3 sm:px-4 py-2.5 sm:py-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 sm:gap-3">
+                        <X size={16} className="sm:w-[18px] sm:h-[18px] text-red-500" />
+                        <span className="text-xs sm:text-sm text-red-700">{error}</span>
                     </div>
                 )}
 
                 {/* Vehicle Selection */}
                 {showVehicleOptions && (
-                    <div className="flex-1 px-6 pb-6 overflow-y-auto">
-                        <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
+                    <div className="flex-1 px-4 sm:px-6 pb-4 sm:pb-6 overflow-y-auto">
+                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 sm:mb-4">
                             Choose a ride
                         </h3>
-                        <div className="space-y-3">
+                        <div className="space-y-2 sm:space-y-3">
                             {(['CAR', 'AUTO', 'BIKE'] as const).map((type) => (
                                 <VehicleOption
                                     key={type}
@@ -528,7 +585,7 @@ const RiderDashboard: React.FC = () => {
                             disabled={loading || !canRequest}
                             onClick={handleRequestRide}
                             className={`
-                                w-full mt-6 py-4 rounded-xl font-semibold text-base transition-all duration-200
+                                w-full mt-4 sm:mt-6 py-3 sm:py-4 rounded-xl font-semibold text-sm sm:text-base transition-all duration-200
                                 flex items-center justify-center gap-2
                                 ${loading 
                                     ? 'bg-zinc-900 text-white' 
@@ -552,20 +609,20 @@ const RiderDashboard: React.FC = () => {
 
                         {/* Search Progress Indicator */}
                         {loading && searchStatus && (
-                            <div className="mt-4 p-4 bg-zinc-50 rounded-xl border border-zinc-200">
+                            <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-zinc-50 rounded-xl border border-zinc-200">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-medium text-zinc-700">Searching for captains</span>
-                                    <span className="text-xs text-zinc-500">
+                                    <span className="text-xs sm:text-sm font-medium text-zinc-700">Searching for captains</span>
+                                    <span className="text-[10px] sm:text-xs text-zinc-500">
                                         {searchStatus.elapsedSeconds}s / {searchStatus.maxSeconds}s
                                     </span>
                                 </div>
-                                <div className="w-full bg-zinc-200 rounded-full h-2 mb-2">
+                                <div className="w-full bg-zinc-200 rounded-full h-1.5 sm:h-2 mb-2">
                                     <div 
-                                        className="bg-zinc-900 h-2 rounded-full transition-all duration-500"
+                                        className="bg-zinc-900 h-1.5 sm:h-2 rounded-full transition-all duration-500"
                                         style={{ width: `${(searchStatus.elapsedSeconds / searchStatus.maxSeconds) * 100}%` }}
                                     />
                                 </div>
-                                <p className="text-xs text-zinc-500">
+                                <p className="text-[10px] sm:text-xs text-zinc-500">
                                     {searchStatus.captainsNotified > 0 
                                         ? `${searchStatus.captainsNotified} captain(s) notified within ${searchStatus.currentRadius}km`
                                         : `Expanding search radius to ${searchStatus.currentRadius}km...`
@@ -578,7 +635,7 @@ const RiderDashboard: React.FC = () => {
                         {loading && rideId && (
                             <button
                                 onClick={cancelRide}
-                                className="w-full mt-3 py-3 rounded-xl font-medium text-red-600 border-2 border-red-200 hover:bg-red-50 transition-colors"
+                                className="w-full mt-2 sm:mt-3 py-2.5 sm:py-3 rounded-xl font-medium text-red-600 border-2 border-red-200 hover:bg-red-50 transition-colors text-sm"
                             >
                                 Cancel Request
                             </button>
@@ -588,12 +645,12 @@ const RiderDashboard: React.FC = () => {
 
                 {/* Empty state when no destination */}
                 {!showVehicleOptions && (
-                    <div className="flex-1 flex items-center justify-center px-6">
+                    <div className="flex-1 flex items-center justify-center px-4 sm:px-6">
                         <div className="text-center">
-                            <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Car size={28} className="text-zinc-400" />
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                                <Car size={24} className="sm:w-7 sm:h-7 text-zinc-400" />
                             </div>
-                            <p className="text-zinc-500 text-sm">
+                            <p className="text-zinc-500 text-xs sm:text-sm">
                                 Enter your destination to see available rides
                             </p>
                         </div>
@@ -601,8 +658,8 @@ const RiderDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* Right Panel - Map */}
-            <div className="flex-1 relative">
+            {/* Right Panel - Map (Hidden on mobile, shown on md+) */}
+            <div className="hidden md:flex flex-1 relative">
                 {pickupCoords && dropoffCoords ? (
                     <RideMap
                         pickup={[pickupCoords.lat, pickupCoords.lng]}

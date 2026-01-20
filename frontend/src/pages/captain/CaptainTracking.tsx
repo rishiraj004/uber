@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert, Star, Clock, Route, ChevronUp, ChevronDown } from 'lucide-react';
+import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert, Star, Clock, Route, ChevronUp, ChevronDown, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../../context/socket-context';
@@ -9,6 +9,7 @@ import { RideMap } from '../../components/RideMap';
 import { AxiosError } from 'axios';
 import RatingModal from '../../components/RatingModal';
 import RideChat from '../../components/RideChat';
+import EmergencyModal from '../../components/EmergencyModal';
 
 interface RideData {
   id?: number;
@@ -40,6 +41,7 @@ const CaptainTracking = () => {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [completedRideData, setCompletedRideData] = useState<{ rideId: number; riderName: string; riderId: number } | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
 
   // Map States
   const [path, setPath] = useState<[number, number][]>([]);
@@ -189,6 +191,16 @@ const CaptainTracking = () => {
   return (
     <div className="h-screen w-screen relative bg-zinc-900 overflow-hidden">
       
+      {/* SOS Button */}
+      <button 
+        onClick={() => setIsEmergencyOpen(true)}
+        className="absolute top-14 sm:top-16 right-4 sm:right-6 z-30 bg-red-600 text-white p-2.5 sm:p-3 rounded-full shadow-2xl hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center"
+        title="Emergency SOS"
+        aria-label="Emergency SOS button"
+      >
+        <AlertTriangle size={20} className="sm:w-6 sm:h-6" />
+      </button>
+      
       {/* Rating Modal */}
       {completedRideData && (
         <RatingModal
@@ -220,9 +232,9 @@ const CaptainTracking = () => {
 
       {/* Status Bar - Top */}
       <div className="absolute top-0 left-0 right-0 z-20">
-        <div className={`${statusConfig.color} px-6 py-3 flex items-center justify-center gap-2`}>
-          <statusConfig.icon size={18} className="text-white" />
-          <span className="text-white font-semibold">{statusConfig.label}</span>
+        <div className={`${statusConfig.color} px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-center gap-2`}>
+          <statusConfig.icon size={16} className="sm:w-[18px] sm:h-[18px] text-white" />
+          <span className="text-white font-semibold text-sm sm:text-base">{statusConfig.label}</span>
         </div>
       </div>
 
@@ -231,89 +243,89 @@ const CaptainTracking = () => {
         initial={{ y: 0 }}
         animate={{ y: isSheetExpanded ? 0 : "calc(100% - 80px)" }}
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl z-20 shadow-2xl"
-        style={{ maxHeight: '70vh' }}
+        className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl z-20 shadow-2xl overflow-hidden"
+        style={{ maxHeight: '75vh' }}
       >
         {/* Pull Handle */}
         <div 
           onClick={() => setIsSheetExpanded(!isSheetExpanded)}
-          className="w-full py-4 cursor-pointer flex flex-col items-center"
+          className="w-full py-3 sm:py-4 cursor-pointer flex flex-col items-center"
         >
-          <div className="w-12 h-1.5 bg-zinc-200 rounded-full mb-2" />
+          <div className="w-10 sm:w-12 h-1 sm:h-1.5 bg-zinc-200 rounded-full mb-1.5 sm:mb-2" />
           <div className="flex items-center gap-1 text-zinc-400">
-            {isSheetExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-            <span className="text-xs font-medium">{isSheetExpanded ? 'Collapse' : 'Expand'}</span>
+            {isSheetExpanded ? <ChevronDown size={14} className="sm:w-4 sm:h-4" /> : <ChevronUp size={14} className="sm:w-4 sm:h-4" />}
+            <span className="text-[10px] sm:text-xs font-medium">{isSheetExpanded ? 'Collapse' : 'Expand'}</span>
           </div>
         </div>
 
-        <div className={`px-6 pb-8 ${!isSheetExpanded ? 'hidden' : ''}`}>
+        <div className={`px-4 sm:px-6 pb-6 sm:pb-8 overflow-y-auto ${!isSheetExpanded ? 'hidden' : ''}`} style={{ maxHeight: 'calc(75vh - 60px)' }}>
           {/* Rider Info */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-linear-to-br from-blue-500 to-blue-600 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-lg">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-11 h-11 sm:w-14 sm:h-14 bg-linear-to-br from-blue-500 to-blue-600 text-white rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shadow-lg">
                 {initialRide?.riderName?.[0]?.toUpperCase() || 'R'}
               </div>
               <div>
-                <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider">Rider</p>
-                <h3 className="text-xl font-bold text-zinc-900">{initialRide?.riderName || 'Customer'}</h3>
+                <p className="text-[9px] sm:text-xs text-zinc-400 font-semibold uppercase tracking-wider">Rider</p>
+                <h3 className="text-base sm:text-xl font-bold text-zinc-900">{initialRide?.riderName || 'Customer'}</h3>
                 <div className="flex items-center gap-1 mt-0.5">
-                  <Star size={14} className="fill-yellow-400 text-yellow-400" />
-                  <span className="text-sm font-medium text-zinc-600">
+                  <Star size={12} className="sm:w-3.5 sm:h-3.5 fill-yellow-400 text-yellow-400" />
+                  <span className="text-xs sm:text-sm font-medium text-zinc-600">
                     {initialRide?.riderRating?.toFixed(1) || '5.0'}
                   </span>
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 sm:gap-2">
               <button 
                 title="Call rider" 
-                className="p-3 bg-zinc-100 rounded-xl text-zinc-600 hover:bg-zinc-200 transition-colors"
+                className="p-2.5 sm:p-3 bg-zinc-100 rounded-xl text-zinc-600 hover:bg-zinc-200 transition-colors"
               >
-                <Phone size={20} />
+                <Phone size={18} className="sm:w-5 sm:h-5" />
               </button>
               <button 
                 onClick={() => setIsChatOpen(true)}
                 title="Message rider" 
-                className="p-3 bg-zinc-100 rounded-xl text-zinc-600 hover:bg-zinc-200 transition-colors"
+                className="p-2.5 sm:p-3 bg-zinc-100 rounded-xl text-zinc-600 hover:bg-zinc-200 transition-colors"
               >
-                <MessageSquare size={20} />
+                <MessageSquare size={18} className="sm:w-5 sm:h-5" />
               </button>
             </div>
           </div>
 
           {/* Trip Details */}
-          <div className="bg-zinc-50 rounded-2xl p-4 mb-6">
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                  <MapPin size={16} className="text-blue-600" />
+          <div className="bg-zinc-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex items-start gap-2.5 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                  <MapPin size={14} className="sm:w-4 sm:h-4 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Pickup</p>
-                  <p className="text-sm font-semibold text-zinc-900 truncate">{initialRide?.pickupAddress}</p>
+                  <p className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Pickup</p>
+                  <p className="text-xs sm:text-sm font-semibold text-zinc-900 truncate">{initialRide?.pickupAddress}</p>
                 </div>
               </div>
-              <div className="ml-4 border-l-2 border-dashed border-zinc-200 h-4" />
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                  <Navigation size={16} className="text-white" />
+              <div className="ml-3.5 sm:ml-4 border-l-2 border-dashed border-zinc-200 h-3 sm:h-4" />
+              <div className="flex items-start gap-2.5 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-zinc-900 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                  <Navigation size={14} className="sm:w-4 sm:h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Dropoff</p>
-                  <p className="text-sm font-semibold text-zinc-900 truncate">{initialRide?.dropoffAddress}</p>
+                  <p className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Dropoff</p>
+                  <p className="text-xs sm:text-sm font-semibold text-zinc-900 truncate">{initialRide?.dropoffAddress}</p>
                 </div>
               </div>
             </div>
             
             {/* Fare Display */}
-            <div className="mt-4 pt-4 border-t border-zinc-200 flex items-center justify-between">
-              <span className="text-sm text-zinc-500">Trip Fare</span>
-              <span className="text-xl font-black text-zinc-900">₹{initialRide?.fare}</span>
+            <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-zinc-200 flex items-center justify-between">
+              <span className="text-xs sm:text-sm text-zinc-500">Trip Fare</span>
+              <span className="text-lg sm:text-xl font-black text-zinc-900">₹{initialRide?.fare}</span>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <AnimatePresence mode="wait">
               {rideStatus === 'ACCEPTED' && (
                 <motion.button 
@@ -322,9 +334,9 @@ const CaptainTracking = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   onClick={handleArrived}
-                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                 >
-                  <MapPin size={20} />
+                  <MapPin size={18} className="sm:w-5 sm:h-5" />
                   I Have Arrived
                 </motion.button>
               )}
@@ -334,13 +346,13 @@ const CaptainTracking = () => {
                   key="otp-panel"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
+                  className="space-y-3 sm:space-y-4"
                 >
                   <div className="text-center">
-                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
+                    <p className="text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 sm:mb-3">
                       Enter Rider's OTP
                     </p>
-                    <div className="flex justify-center gap-3">
+                    <div className="flex justify-center gap-2 sm:gap-3">
                       {[0, 1, 2, 3].map((index) => (
                         <input
                           key={index}
@@ -357,7 +369,7 @@ const CaptainTracking = () => {
                               nextInput?.focus();
                             }
                           }}
-                          className="w-14 h-14 text-center text-2xl font-black bg-zinc-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                          className="w-11 h-11 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black bg-zinc-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                         />
                       ))}
                     </div>
@@ -365,16 +377,16 @@ const CaptainTracking = () => {
                   <button 
                     onClick={handleStartTrip}
                     disabled={loading || otp.length !== 4}
-                    className="w-full bg-amber-500 text-white py-4 rounded-2xl font-bold text-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-amber-500 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {loading ? (
                       <>
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         Verifying...
                       </>
                     ) : (
                       <>
-                        <Navigation size={20} />
+                        <Navigation size={18} className="sm:w-5 sm:h-5" />
                         Start Trip
                       </>
                     )}
@@ -389,16 +401,16 @@ const CaptainTracking = () => {
                   animate={{ opacity: 1, y: 0 }}
                   onClick={handleCompleteTrip}
                   disabled={loading}
-                  className="w-full bg-green-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full bg-green-600 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       Processing...
                     </>
                   ) : (
                     <>
-                      <Route size={20} />
+                      <Route size={18} className="sm:w-5 sm:h-5" />
                       Complete Trip • Collect ₹{initialRide?.fare}
                     </>
                   )}
@@ -407,8 +419,11 @@ const CaptainTracking = () => {
             </AnimatePresence>
 
             {/* Emergency Button */}
-            <button className="w-full flex items-center justify-center gap-2 text-red-500 font-semibold text-sm py-3 hover:bg-red-50 rounded-xl transition-colors">
-              <ShieldAlert size={18} />
+            <button 
+              onClick={() => setIsEmergencyOpen(true)}
+              className="w-full flex items-center justify-center gap-2 text-red-500 font-semibold text-xs sm:text-sm py-2.5 sm:py-3 hover:bg-red-50 rounded-xl transition-colors"
+            >
+              <ShieldAlert size={16} className="sm:w-[18px] sm:h-[18px]" />
               Emergency Support
             </button>
           </div>
@@ -422,6 +437,15 @@ const CaptainTracking = () => {
         rideId={initialRide?.rideId || initialRide?.id || 0}
         recipientName={initialRide?.riderName || 'Rider'}
         recipientRole="RIDER"
+      />
+
+      {/* Emergency Modal */}
+      <EmergencyModal
+        isOpen={isEmergencyOpen}
+        onClose={() => setIsEmergencyOpen(false)}
+        rideId={initialRide?.rideId || initialRide?.id}
+        currentLocation={currentLocation ? { lat: currentLocation[0], lng: currentLocation[1] } : null}
+        driverName={initialRide?.riderName}
       />
     </div>
   );

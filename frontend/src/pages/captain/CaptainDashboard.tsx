@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History, FileText, AlertCircle } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History, FileText, AlertCircle, Menu, X } from 'lucide-react';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap';
@@ -34,6 +34,8 @@ interface VerificationStatus {
   pendingCount: number;
   rejectedCount: number;
   message: string;
+  uploadedDocuments?: number;
+  requiredDocuments?: number;
 }
 
 const CaptainDashboard = () => {
@@ -43,6 +45,7 @@ const CaptainDashboard = () => {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [requestTimer, setRequestTimer] = useState(30);
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
+  const [showMobileStats, setShowMobileStats] = useState(false);
   
   const watchId = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -300,70 +303,78 @@ const CaptainDashboard = () => {
       
       {/* Verification Banner */}
       {verificationStatus && !verificationStatus.canGoOnline && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-center justify-between z-30">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="text-amber-500" size={20} />
+        <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2.5 sm:py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 z-30">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <AlertCircle className="text-amber-500 shrink-0" size={18} />
             <div>
-              <p className="text-sm font-medium text-amber-800">
+              <p className="text-xs sm:text-sm font-medium text-amber-800">
                 {verificationStatus.isVerified 
                   ? 'Account verified but missing documents'
                   : 'Complete document verification to start accepting rides'
                 }
               </p>
-              <p className="text-xs text-amber-600">
+              <p className="text-[10px] sm:text-xs text-amber-600">
                 {verificationStatus.uploadedDocuments} of {verificationStatus.requiredDocuments} documents uploaded
               </p>
             </div>
           </div>
           <button
             onClick={() => navigate('/captain/documents')}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+            className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-amber-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-amber-600 transition-colors w-full sm:w-auto justify-center"
           >
-            <FileText size={16} />
+            <FileText size={14} className="sm:w-4 sm:h-4" />
             Upload Documents
           </button>
         </div>
       )}
 
       {/* Header */}
-      <div className="px-6 py-4 bg-white border-b border-zinc-100 flex justify-between items-center z-20">
-        <div className="flex items-center gap-4">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white border-b border-zinc-100 flex justify-between items-center z-20">
+        <div className="flex items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`} />
-            <span className="font-bold text-lg text-zinc-900">{isOnline ? 'Online' : 'Offline'}</span>
+            <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`} />
+            <span className="font-bold text-base sm:text-lg text-zinc-900">{isOnline ? 'Online' : 'Offline'}</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={handleStatusToggle}
             className={`
-              flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold transition-all duration-200
+              flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-semibold transition-all duration-200 text-sm sm:text-base
               ${isOnline 
                 ? 'bg-red-50 text-red-600 hover:bg-red-100' 
                 : 'bg-zinc-900 text-white hover:bg-zinc-800'
               }
             `}
           >
-            <Power size={18} />
-            {isOnline ? 'Go Offline' : 'Go Online'}
+            <Power size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="hidden sm:inline">{isOnline ? 'Go Offline' : 'Go Online'}</span>
+          </button>
+          {/* Mobile menu toggle for stats */}
+          <button
+            onClick={() => setShowMobileStats(!showMobileStats)}
+            className="p-2 sm:hidden hover:bg-zinc-100 rounded-xl transition-colors"
+            title="Toggle Stats"
+          >
+            {showMobileStats ? <X size={20} className="text-zinc-500" /> : <Menu size={20} className="text-zinc-500" />}
           </button>
           <button
             onClick={() => navigate('/ride-history')}
-            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+            className="hidden sm:block p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
             title="Ride History"
           >
             <History size={20} className="text-zinc-500" />
           </button>
           <button
             onClick={() => navigate('/profile')}
-            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+            className="hidden sm:block p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
             title="Profile"
           >
             <User size={20} className="text-zinc-500" />
           </button>
           <button
             onClick={handleLogout}
-            className="p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
+            className="hidden sm:block p-2.5 hover:bg-zinc-100 rounded-xl transition-colors"
             title="Logout"
           >
             <LogOut size={20} className="text-zinc-500" />
@@ -374,8 +385,112 @@ const CaptainDashboard = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         
-        {/* Left Panel - Stats */}
-        <div className="w-full md:w-95 bg-white border-r border-zinc-100 p-6 overflow-y-auto">
+        {/* Mobile Stats Overlay */}
+        <AnimatePresence>
+          {showMobileStats && (
+            <motion.div
+              initial={{ opacity: 0, x: -300 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -300 }}
+              transition={{ type: "spring", damping: 25 }}
+              className="absolute inset-0 z-30 md:hidden bg-white overflow-y-auto"
+            >
+              <div className="p-4">
+                {/* Close button & Navigation */}
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-lg">Dashboard</h2>
+                  <button 
+                    onClick={() => setShowMobileStats(false)}
+                    className="p-2 hover:bg-zinc-100 rounded-xl"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Mobile Navigation */}
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => { navigate('/ride-history'); setShowMobileStats(false); }}
+                    className="flex-1 flex items-center justify-center gap-2 p-3 bg-zinc-100 rounded-xl text-sm font-medium"
+                  >
+                    <History size={18} /> History
+                  </button>
+                  <button
+                    onClick={() => { navigate('/profile'); setShowMobileStats(false); }}
+                    className="flex-1 flex items-center justify-center gap-2 p-3 bg-zinc-100 rounded-xl text-sm font-medium"
+                  >
+                    <User size={18} /> Profile
+                  </button>
+                  <button
+                    onClick={() => { handleLogout(); }}
+                    className="flex-1 flex items-center justify-center gap-2 p-3 bg-zinc-100 rounded-xl text-sm font-medium text-red-600"
+                  >
+                    <LogOut size={18} /> Logout
+                  </button>
+                </div>
+
+                {/* Earnings Card */}
+                <div className="bg-linear-to-br from-zinc-900 to-zinc-800 rounded-2xl p-5 text-white mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-zinc-400 text-xs font-medium">Today's Earnings</p>
+                    <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
+                      <DollarSign size={16} className="text-green-400" />
+                    </div>
+                  </div>
+                  <h2 className="text-3xl font-black mb-3">₹{analytics.totalEarnings.toFixed(0)}</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white/10 rounded-lg p-2.5">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <TrendingUp size={12} className="text-blue-400" />
+                        <span className="text-[10px] text-zinc-400">Trips</span>
+                      </div>
+                      <p className="text-lg font-bold">{analytics.totalTrips}</p>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-2.5">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Clock size={12} className="text-purple-400" />
+                        <span className="text-[10px] text-zinc-400">Hours</span>
+                      </div>
+                      <p className="text-lg font-bold">{analytics.totalOnlineHours.toFixed(1)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Performance</h3>
+                  <div className="bg-zinc-50 rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <Star size={16} className="text-yellow-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-zinc-500">Rating</p>
+                        <p className="text-base font-bold text-zinc-900">4.9</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={18} className="text-zinc-400" />
+                  </div>
+                  <div className="bg-zinc-50 rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center">
+                        <Zap size={16} className="text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-zinc-500">Acceptance Rate</p>
+                        <p className="text-base font-bold text-zinc-900">95%</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={18} className="text-zinc-400" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Left Panel - Stats (Desktop only) */}
+        <div className="hidden md:block w-95 bg-white border-r border-zinc-100 p-6 overflow-y-auto">
           
           {/* Earnings Card */}
           <div className="bg-linear-to-br from-zinc-900 to-zinc-800 rounded-2xl p-6 text-white mb-6">
