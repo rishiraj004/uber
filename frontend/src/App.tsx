@@ -1,7 +1,7 @@
 import './App.css'
 import { Toaster } from 'react-hot-toast'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { SignupPage, LoginPage, RiderDashboard, RiderTracking, CaptainDashboard, CaptainTracking, Receipt, RideHistory, Profile, CaptainDocuments } from './pages'
+import { SignupPage, LoginPage, RiderDashboard, RiderTracking, CaptainDashboard, CaptainTracking, Receipt, RideHistory, Profile, CaptainDocuments, AdminDashboard } from './pages'
 import { SocketProvider } from './context/SocketProvider'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -20,6 +20,7 @@ function App() {
           <Route path="/rider-tracking" element={<ProtectedRoute allow="RIDER"><RiderTracking /></ProtectedRoute>} />
           <Route path="/rider-receipt" element={<ProtectedRoute allow="RIDER"><Receipt /></ProtectedRoute>} />
           <Route path="/captain-tracking" element={<ProtectedRoute allow="CAPTAIN"><CaptainTracking /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute allow="ADMIN"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/ride-history" element={<ProtectedRoute allow="BOTH"><RideHistory /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute allow="BOTH"><Profile /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />

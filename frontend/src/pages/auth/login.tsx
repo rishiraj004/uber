@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import api from "../../services/api";
 
-type Role = "RIDER" | "CAPTAIN";
+type Role = "RIDER" | "CAPTAIN" | "ADMIN";
 
 type ApiErrorResponse = {
   message?: string;
@@ -43,8 +43,9 @@ const LoginPage: React.FC = () => {
     const role = localStorage.getItem("role") as Role | null;
 
     if (token && role) {
-      if (role === "CAPTAIN") navigate("/captain/dashboard", { replace: true });
-      else navigate("/home", { replace: true });
+      if (role === "ADMIN") navigate("/admin", { replace: true });
+      else if (role === "CAPTAIN") navigate("/captain-dashboard", { replace: true });
+      else navigate("/rider-dashboard", { replace: true });
     }
   }, [navigate]);
 
@@ -76,7 +77,8 @@ const LoginPage: React.FC = () => {
       localStorage.setItem("token", token);
       localStorage.setItem("role", userRole);
 
-      if (userRole === "CAPTAIN") navigate("/captain-dashboard", { replace: true });
+      if (userRole === "ADMIN") navigate("/admin", { replace: true });
+      else if (userRole === "CAPTAIN") navigate("/captain-dashboard", { replace: true });
       else navigate("/rider-dashboard", { replace: true });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err));
