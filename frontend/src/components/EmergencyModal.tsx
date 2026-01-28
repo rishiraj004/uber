@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Phone, Shield, 
   MapPin, Siren,
-  Copy, Check, ExternalLink
+  Copy, Check, ExternalLink, Loader2, AlertTriangle, Share2, Link
 } from 'lucide-react';
+import api from '../services/api';
 
 interface EmergencyContact {
   id: string;
   name: string;
   phone: string;
+  relationship?: string;
 }
 
 interface EmergencyModalProps {
@@ -21,6 +23,13 @@ interface EmergencyModalProps {
   vehicleNumber?: string;
 }
 
+// Default emergency services
+const defaultEmergencyServices: EmergencyContact[] = [
+  { id: 'emergency-112', name: 'Emergency Services', phone: '112' },
+  { id: 'police-100', name: 'Police', phone: '100' },
+  { id: 'women-1091', name: 'Women Helpline', phone: '1091' },
+];
+
 const EmergencyModal = ({
   isOpen,
   onClose,
@@ -31,13 +40,84 @@ const EmergencyModal = ({
 }: EmergencyModalProps) => {
   const [copiedRideId, setCopiedRideId] = useState(false);
   const [alertSent, setAlertSent] = useState(false);
-  
-  // Mock emergency contacts - in real app, fetch from user profile
-  const emergencyContacts: EmergencyContact[] = [
-    { id: '1', name: 'Emergency Services', phone: '112' },
-    { id: '2', name: 'Police', phone: '100' },
-    { id: '3', name: 'Women Helpline', phone: '1091' },
-  ];
+  const [sosSending, setSosSending] = useState(false);
+  const [sosError, setSosError] = useState<string | null>(null);
+  const [sosSuccess, setSosSuccess] = useState(false);
+  const [personalContacts, setPersonalContacts] = useState<EmergencyContact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  // Fetch user's emergency contacts when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchEmergencyContacts();
+    }
+  }, [isOpen]);
+
+  const fetchEmergencyContacts = async () => {
+    try {
+      setLoadingContacts(true);
+      const response = await api.get('/v1/sos/contacts');
+      if (response.data.contacts) {
+        setPersonalContacts(response.data.contacts);
+      }
+    } catch (error) {
+      console.error('Failed to fetch emergency contacts:', error);
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  const handleTriggerSOS = async () => {
+    if (!rideId || !currentLocation) {
+      setSosError('Cannot send SOS without active ride and location');
+      return;
+    }
+
+    try {
+      setSosSending(true);
+      setSosError(null);
+
+      await api.post('/v1/sos/trigger', {
+        rideId,
+        latitude: currentLocation.lat,
+        longitude: currentLocation.lng
+      });
+
+      setSosSuccess(true);
+      setTimeout(() => setSosSuccess(false), 5000);
+    } catch (error: any) {
+      setSosError(error.response?.data?.message || 'Failed to send SOS alert');
+    } finally {
+      setSosSending(false);
+    }
+  };
+
+  const handleCreateShareLink = async () => {
+    if (!rideId) return;
+
+    try {
+      setShareLoading(true);
+      const response = await api.post('/v1/sos/share/create', { rideId });
+      const token = response.data.shareLink.token;
+      const fullLink = `${window.location.origin}/track/${token}`;
+      setShareLink(fullLink);
+    } catch (error: any) {
+      console.error('Failed to create share link:', error);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleCopyShareLink = () => {
+    if (shareLink) {
+      navigator.clipboard.writeText(shareLink);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
+  };
 
   const handleCopyRideId = () => {
     if (rideId) {
@@ -100,6 +180,53 @@ const EmergencyModal = ({
             </div>
           </div>
 
+          {/* SOS Alert Success */}
+          <AnimatePresence>
+            {sosSuccess && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="bg-green-50 border-b border-green-100"
+              >
+                <div className="p-4 flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Check size={16} className="text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-green-800 font-medium">
+                      SOS Alert Sent Successfully!
+                    </p>
+                    <p className="text-xs text-green-600">
+                      Our support team has been notified and will assist you shortly.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* SOS Error */}
+          <AnimatePresence>
+            {sosError && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="bg-red-50 border-b border-red-100"
+              >
+                <div className="p-4 flex items-center gap-3">
+                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                    <AlertTriangle size={16} className="text-red-600" />
+                  </div>
+                  <p className="text-sm text-red-800 font-medium">
+                    {sosError}
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Alert Sent Notification */}
           <AnimatePresence>
             {alertSent && (
@@ -123,6 +250,43 @@ const EmergencyModal = ({
 
           {/* Content */}
           <div className="p-5 space-y-5">
+            {/* SOS Alert Button - Primary Action */}
+            {rideId && currentLocation && (
+              <div>
+                <button
+                  onClick={handleTriggerSOS}
+                  disabled={sosSending || sosSuccess}
+                  className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-lg transition-all ${
+                    sosSuccess 
+                      ? 'bg-green-600 text-white'
+                      : sosSending
+                        ? 'bg-red-400 text-white cursor-not-allowed'
+                        : 'bg-red-600 text-white hover:bg-red-700 active:scale-[0.98]'
+                  }`}
+                >
+                  {sosSending ? (
+                    <>
+                      <Loader2 size={24} className="animate-spin" />
+                      <span>Sending SOS...</span>
+                    </>
+                  ) : sosSuccess ? (
+                    <>
+                      <Check size={24} />
+                      <span>SOS Sent!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Siren size={24} />
+                      <span>Send SOS Alert</span>
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-center text-zinc-500 mt-2">
+                  This will immediately alert our support team and notify your emergency contacts
+                </p>
+              </div>
+            )}
+
             {/* Quick Actions */}
             <div>
               <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
@@ -152,6 +316,71 @@ const EmergencyModal = ({
                 </button>
               </div>
             </div>
+
+            {/* Share Ride Link */}
+            {rideId && (
+              <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                    <Share2 size={20} className="text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-purple-900">Share Live Tracking</h3>
+                    <p className="text-xs text-purple-600">Let friends/family track your ride</p>
+                  </div>
+                </div>
+
+                {!shareLink ? (
+                  <button
+                    onClick={handleCreateShareLink}
+                    disabled={shareLoading}
+                    className="w-full py-2.5 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {shareLoading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Creating Link...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Link size={16} />
+                        <span>Create Share Link</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-purple-200">
+                      <input
+                        type="text"
+                        value={shareLink}
+                        readOnly
+                        className="flex-1 text-xs text-zinc-600 bg-transparent outline-none truncate"
+                      />
+                      <button
+                        onClick={handleCopyShareLink}
+                        className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200 transition-colors flex items-center gap-1"
+                      >
+                        {shareCopied ? (
+                          <>
+                            <Check size={12} />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            Copy
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-purple-500 text-center">
+                      Link expires in 24 hours
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Ride Info Card */}
             {(rideId || driverName || vehicleNumber) && (
@@ -198,7 +427,7 @@ const EmergencyModal = ({
                 Emergency Numbers
               </h3>
               <div className="space-y-2">
-                {emergencyContacts.map((contact) => (
+                {defaultEmergencyServices.map((contact) => (
                   <button
                     key={contact.id}
                     onClick={() => handleCallEmergency(contact.phone)}
@@ -218,6 +447,41 @@ const EmergencyModal = ({
                 ))}
               </div>
             </div>
+
+            {/* Personal Emergency Contacts */}
+            {loadingContacts ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 size={20} className="animate-spin text-zinc-400" />
+              </div>
+            ) : personalContacts.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
+                  Your Emergency Contacts
+                </h3>
+                <div className="space-y-2">
+                  {personalContacts.map((contact) => (
+                    <button
+                      key={contact.id}
+                      onClick={() => handleCallEmergency(contact.phone)}
+                      className="w-full flex items-center justify-between p-3 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                          <Phone size={18} className="text-blue-600" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-semibold text-zinc-900">{contact.name}</p>
+                          <p className="text-xs text-zinc-500">
+                            {contact.phone} {contact.relationship && `• ${contact.relationship}`}
+                          </p>
+                        </div>
+                      </div>
+                      <ExternalLink size={16} className="text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Safety Tips */}
             <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">

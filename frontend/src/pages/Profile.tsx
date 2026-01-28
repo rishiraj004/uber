@@ -3,12 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Mail, Phone, Star, Home, Briefcase,
   Car, FileText, CheckCircle, Clock, XCircle, Upload, LogOut,
-  ChevronRight, Shield, Edit2, X
+  ChevronRight, Shield, Edit2, X, AlertCircle, Plus, Trash2, Loader2, UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+
+interface EmergencyContact {
+  id: string;
+  name: string;
+  phone: string;
+  relationship?: string;
+}
 
 interface UserProfile {
   id: number;
@@ -68,7 +75,7 @@ const Profile = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'documents'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'documents' | 'emergency'>('profile');
   const [editingAddress, setEditingAddress] = useState<'home' | 'work' | null>(null);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [sessionToken] = useState(() => generateSessionToken());
@@ -76,6 +83,13 @@ const Profile = () => {
   // Address edit states
   const [tempAddress, setTempAddress] = useState('');
   const [tempCoords, setTempCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Emergency contacts states
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [savingContacts, setSavingContacts] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
+  const [newContact, setNewContact] = useState<Partial<EmergencyContact>>({});
 
   const token = localStorage.getItem('token');
   const userRole = token ? JSON.parse(atob(token.split('.')[1])).role : 'RIDER';
@@ -108,6 +122,61 @@ const Profile = () => {
       fetchDocuments();
     }
   }, [userRole]);
+
+  // Fetch emergency contacts for riders
+  useEffect(() => {
+    if (userRole === 'RIDER') {
+      const fetchEmergencyContacts = async () => {
+        try {
+          setLoadingContacts(true);
+          const response = await api.get('/v1/sos/contacts');
+          if (response.data.contacts) {
+            setEmergencyContacts(response.data.contacts);
+          }
+        } catch (error) {
+          console.error("Error fetching emergency contacts:", error);
+        } finally {
+          setLoadingContacts(false);
+        }
+      };
+      fetchEmergencyContacts();
+    }
+  }, [userRole]);
+
+  const handleAddEmergencyContact = () => {
+    if (!newContact.name || !newContact.phone) {
+      toast.error('Please enter name and phone number');
+      return;
+    }
+
+    const contact: EmergencyContact = {
+      id: `contact-${Date.now()}`,
+      name: newContact.name,
+      phone: newContact.phone,
+      relationship: newContact.relationship
+    };
+
+    setEmergencyContacts([...emergencyContacts, contact]);
+    setNewContact({});
+    setAddingContact(false);
+  };
+
+  const handleRemoveEmergencyContact = (contactId: string) => {
+    setEmergencyContacts(emergencyContacts.filter(c => c.id !== contactId));
+  };
+
+  const handleSaveEmergencyContacts = async () => {
+    try {
+      setSavingContacts(true);
+      await api.post('/v1/sos/contacts', { contacts: emergencyContacts });
+      toast.success('Emergency contacts saved!');
+    } catch (error) {
+      console.error("Error saving emergency contacts:", error);
+      toast.error('Failed to save emergency contacts');
+    } finally {
+      setSavingContacts(false);
+    }
+  };
 
   const handleSaveAddress = async (type: 'home' | 'work') => {
     if (!tempAddress || !tempCoords) {
@@ -273,6 +342,18 @@ const Profile = () => {
                 }`}
               >
                 Saved Places
+              </button>
+            )}
+            {userRole === 'RIDER' && (
+              <button
+                onClick={() => setActiveTab('emergency')}
+                className={`py-4 px-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'emergency' 
+                    ? 'border-zinc-900 text-zinc-900' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Emergency
               </button>
             )}
             {userRole === 'CAPTAIN' && (
@@ -531,6 +612,151 @@ const Profile = () => {
                   </button>
                 )}
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'emergency' && userRole === 'RIDER' && (
+            <motion.div
+              key="emergency"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-4"
+            >
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start gap-3">
+                <AlertCircle size={20} className="text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-900">Emergency Contacts</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    Add trusted contacts who will be notified when you trigger an SOS alert during a ride.
+                  </p>
+                </div>
+              </div>
+
+              {loadingContacts ? (
+                <div className="bg-white rounded-2xl shadow-sm p-8 flex items-center justify-center">
+                  <Loader2 size={24} className="animate-spin text-zinc-400" />
+                </div>
+              ) : (
+                <>
+                  {/* Contact List */}
+                  {emergencyContacts.length > 0 && (
+                    <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-100">
+                      {emergencyContacts.map((contact) => (
+                        <div key={contact.id} className="p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                              <Phone size={18} className="text-red-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{contact.name}</p>
+                              <p className="text-sm text-gray-500">
+                                {contact.phone}
+                                {contact.relationship && ` • ${contact.relationship}`}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveEmergencyContact(contact.id)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors text-red-500"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add New Contact Form */}
+                  {addingContact ? (
+                    <div className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                            <UserPlus size={18} className="text-blue-600" />
+                          </div>
+                          <span className="font-semibold">Add Emergency Contact</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setAddingContact(false);
+                            setNewContact({});
+                          }}
+                          className="p-2 hover:bg-gray-100 rounded-lg"
+                        >
+                          <X size={18} className="text-gray-500" />
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          placeholder="Contact name"
+                          value={newContact.name || ''}
+                          onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                        />
+                        <input
+                          type="tel"
+                          placeholder="Phone number"
+                          value={newContact.phone || ''}
+                          onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Relationship (optional)"
+                          value={newContact.relationship || ''}
+                          onChange={(e) => setNewContact({ ...newContact, relationship: e.target.value })}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleAddEmergencyContact}
+                        className="w-full py-3 bg-zinc-900 text-white rounded-xl font-medium hover:bg-zinc-800 transition-colors"
+                      >
+                        Add Contact
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAddingContact(true)}
+                      className="w-full bg-white rounded-2xl shadow-sm p-4 flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors border-2 border-dashed border-gray-200"
+                    >
+                      <Plus size={20} className="text-gray-400" />
+                      <span className="text-gray-600 font-medium">Add Emergency Contact</span>
+                    </button>
+                  )}
+
+                  {/* Save Button */}
+                  {emergencyContacts.length > 0 && (
+                    <button
+                      onClick={handleSaveEmergencyContacts}
+                      disabled={savingContacts}
+                      className="w-full py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {savingContacts ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Shield size={18} />
+                          <span>Save Emergency Contacts</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {emergencyContacts.length === 0 && !addingContact && (
+                    <p className="text-center text-sm text-gray-400">
+                      No emergency contacts added yet. Add contacts to be notified in case of emergencies.
+                    </p>
+                  )}
+                </>
+              )}
             </motion.div>
           )}
 

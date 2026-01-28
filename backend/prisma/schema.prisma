@@ -100,6 +100,8 @@ model Ride {
   locationLogs RideLocationLog[]
   reviews      Review[]          @relation("RideReviews")
   chatMessages ChatMessage[]
+  sosAlerts    SOSAlert[]
+  shareLinks   RideShareLink[]
 
   status RideStatus @default(PENDING)
 
@@ -135,6 +137,7 @@ model User {
 
   ridesAsRider Ride[]        @relation("RiderRides")
   chatMessages ChatMessage[]
+  sosAlerts    SOSAlert[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -155,11 +158,46 @@ model RiderProfile {
   workAddressLat Float?
   workAddressLng Float?
 
+  // Emergency contacts (stored as JSON array)
+  emergencyContacts String? @db.Text // JSON: [{name, phone, relation}]
+
   rating     Float @default(5.0)
   totalRides Int   @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// SOS Alerts for emergency situations
+model SOSAlert {
+  id     Int  @id @default(autoincrement())
+  ride   Ride @relation(fields: [rideId], references: [id])
+  rideId Int
+
+  user   User @relation(fields: [userId], references: [id])
+  userId Int
+
+  latitude  Float
+  longitude Float
+
+  status     String    @default("ACTIVE") // ACTIVE, RESOLVED, FALSE_ALARM
+  resolvedAt DateTime?
+  resolvedBy Int? // Admin who resolved it
+
+  createdAt DateTime @default(now())
+}
+
+// Ride Share Links for sharing live tracking
+model RideShareLink {
+  id     Int  @id @default(autoincrement())
+  ride   Ride @relation(fields: [rideId], references: [id])
+  rideId Int
+
+  token     String   @unique // UUID token for public access
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
 }
 
 model CaptainProfile {

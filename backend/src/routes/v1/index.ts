@@ -8,6 +8,7 @@ import profileRoutes from '../v1/profileRoutes';
 import chatRoutes from '../v1/chatRoutes';
 import documentRoutes from '../v1/documentRoutes';
 import adminRoutes from '../v1/adminRoutes';
+import sosRoutes from '../v1/sosRoutes';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/profile', profileRoutes);
 router.use('/chat', chatRoutes);
 router.use('/documents', documentRoutes);
 router.use('/admin', adminRoutes);
+router.use('/sos', sosRoutes);
 
 export default router;
