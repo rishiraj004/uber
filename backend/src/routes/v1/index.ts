@@ -11,6 +11,9 @@ import adminRoutes from '../v1/adminRoutes';
 import sosRoutes from '../v1/sosRoutes';
 import paymentRoutes from '../v1/paymentRoutes';
 import notificationRoutes from '../v1/notificationRoutes';
+import biddingRoutes from '../v1/biddingRoutes';
+import heatmapRoutes from '../v1/heatmapRoutes';
+import rideSharingRoutes from '../v1/rideSharingRoutes';
 
 const router = Router();
 
@@ -26,5 +29,8 @@ router.use('/admin', adminRoutes);
 router.use('/sos', sosRoutes);
 router.use('/payment', paymentRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/bids', biddingRoutes);
+router.use('/heatmap', heatmapRoutes);
+router.use('/ride-sharing', rideSharingRoutes);
 
 export default router;

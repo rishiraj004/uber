@@ -41,6 +41,12 @@ enum VehicleClass {
   XL // SUVs and larger vehicles
 }
 
+// Ride type for solo vs shared rides
+enum RideType {
+  SOLO // Regular single-rider trip
+  SHARED // Pool/shared ride
+}
+
 // Payment status enum
 enum PaymentStatus {
   PENDING
@@ -59,6 +65,15 @@ enum DocumentStatus {
   PENDING
   VERIFIED
   REJECTED
+}
+
+// Bidding status for negotiation mode
+enum BidStatus {
+  PENDING // Waiting for captain response
+  ACCEPTED // Captain accepted rider's price
+  COUNTERED // Captain made counter-offer
+  REJECTED // Bid rejected/expired
+  SELECTED // Rider selected this bid
 }
 
 model Review {
@@ -120,11 +135,25 @@ model Ride {
   sosAlerts    SOSAlert[]
   shareLinks   RideShareLink[]
   payment      Payment?          @relation("RidePayment")
+  bids         RideBid[]         @relation("RideBids")
 
   status RideStatus @default(PENDING)
 
   vehicleType  VehicleType
   vehicleClass VehicleClass @default(ECONOMY)
+
+  // Ride type for solo vs shared
+  rideType        RideType @default(SOLO)
+  availableSeats  Int      @default(0) // For shared rides: remaining seats
+  parentRideId    Int? // For shared rides: link to original ride
+  parentRide      Ride?    @relation("SharedRides", fields: [parentRideId], references: [id])
+  sharedRides     Ride[]   @relation("SharedRides")
+  sharingDiscount Float    @default(0) // Discount percentage for shared rides
+
+  // Bidding/Negotiation mode
+  isBiddingEnabled Boolean @default(false)
+  baseOfferPrice   Float? // Rider's initial offer
+  finalAgreedPrice Float? // Final negotiated price
 
   fare            Float?
   surgeMultiplier Float  @default(1.0) // Surge pricing multiplier
@@ -141,6 +170,27 @@ model Ride {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Bidding model for negotiation mode (like InDrive)
+model RideBid {
+  id     Int  @id @default(autoincrement())
+  ride   Ride @relation("RideBids", fields: [rideId], references: [id])
+  rideId Int
+
+  captain   CaptainProfile @relation("CaptainBids", fields: [captainId], references: [id])
+  captainId Int
+
+  offerAmount Float // Captain's counter-offer (or accepted amount)
+  status      BidStatus @default(PENDING)
+
+  // ETA info for rider to see
+  estimatedArrival Int? // Minutes to pickup
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rideId, captainId]) // One bid per captain per ride
 }
 
 model User {
@@ -255,12 +305,21 @@ model CaptainProfile {
   // Wallet balance (pending withdrawals)
   walletBalance Float @default(0.0)
 
+  // OCR extracted document data
+  licenseNumber  String?
+  licenseExpiry  DateTime?
+  rcNumber       String?
+  rcExpiry       DateTime?
+  ownerName      String?
+  lastVerifiedAt DateTime? // Last external verification check
+
   // Captain documents
   documents CaptainDocument[]
 
   ridesGiven  Ride[]       @relation("CaptainRides")
   shifts      Shift[]
   withdrawals Withdrawal[] @relation("CaptainWithdrawals")
+  bids        RideBid[]    @relation("CaptainBids")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -275,6 +334,17 @@ model CaptainDocument {
   documentType String // LICENSE, INSURANCE, RC, AADHAR, PAN
   documentUrl  String
   status       DocumentStatus @default(PENDING)
+
+  // OCR extracted data
+  extractedText   String?   @db.Text // Raw extracted text from OCR
+  extractedNumber String? // Extracted document number
+  extractedExpiry DateTime? // Extracted expiry date
+  extractedName   String? // Extracted name
+
+  // External verification result
+  externalVerified     Boolean   @default(false)
+  externalVerifyStatus String? // ACTIVE, SUSPENDED, EXPIRED, etc.
+  lastExternalCheck    DateTime?
 
   uploadedAt DateTime  @default(now())
   verifiedAt DateTime?

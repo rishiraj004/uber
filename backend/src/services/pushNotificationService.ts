@@ -11,7 +11,9 @@ type NotificationType =
     | 'NEW_CHAT_MESSAGE'
     | 'PAYMENT_CAPTURED'
     | 'WITHDRAWAL_COMPLETED'
-    | 'SOS_ALERT';
+    | 'SOS_ALERT'
+    | 'DOCUMENT_EXPIRED'
+    | 'DOCUMENT_EXPIRING';
 
 interface NotificationPayload {
     title: string;
@@ -75,6 +77,18 @@ const notificationTemplates: Record<NotificationType, (data: any) => Notificatio
         title: '🚨 SOS Alert!',
         body: `Emergency alert triggered for ride #${data.rideId}`,
         data: { rideId: String(data.rideId), type: 'SOS_ALERT' }
+    }),
+    DOCUMENT_EXPIRED: (data) => ({
+        title: 'Documents Expired! ⚠️',
+        body: data.documentType === 'LICENSE' 
+            ? 'Your driving license has expired. Please update your documents to continue driving.'
+            : 'Your vehicle registration has expired. Please update your documents to continue driving.',
+        data: { type: 'DOCUMENT_EXPIRED', documentType: data.documentType }
+    }),
+    DOCUMENT_EXPIRING: (data) => ({
+        title: 'License Expiring Soon ⏰',
+        body: `Your driving license will expire in ${data.daysLeft} days. Please renew it to avoid service interruption.`,
+        data: { type: 'DOCUMENT_EXPIRING', documentType: data.documentType, daysLeft: String(data.daysLeft) }
     })
 };
 

@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import apiRoutes from './routes';
 import dotenv from 'dotenv';
+import { startCronJobs, stopCronJobs } from './services/cronJobService';
 
 dotenv.config();
 
@@ -21,6 +22,24 @@ app.use('/api', apiRoutes);
 
 app.get('/', (req, res) => {
     res.send('Uber Backend is running');
+});
+
+// Start cron jobs when app initializes
+if (process.env.NODE_ENV !== 'test') {
+    startCronJobs();
+}
+
+// Graceful shutdown handler
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Stopping cron jobs...');
+    stopCronJobs();
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received. Stopping cron jobs...');
+    stopCronJobs();
+    process.exit(0);
 });
 
 export default app;

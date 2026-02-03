@@ -7,22 +7,37 @@ import {
     deleteDocument, 
     getVerificationStatus 
 } from "../../controllers/documentController";
+import {
+    verifyDocument,
+    syncWithGovtRecords,
+    checkExpiredDocuments
+} from "../../controllers/documentVerificationController";
 
 const router = Router();
 
-// All routes require authentication and CAPTAIN role
-router.use(authenticate, authorizeRole("CAPTAIN"));
+// Captain routes
+router.use(authenticate);
 
-// Upload a document
-router.post("/upload", uploadDocument);
+// Upload a document (Captain only)
+router.post("/upload", authorizeRole("CAPTAIN"), uploadDocument);
 
-// Get all my documents
-router.get("/", getMyDocuments);
+// Get all my documents (Captain only)
+router.get("/", authorizeRole("CAPTAIN"), getMyDocuments);
 
-// Get verification status
-router.get("/verification-status", getVerificationStatus);
+// Get verification status (Captain only)
+router.get("/verification-status", authorizeRole("CAPTAIN"), getVerificationStatus);
 
-// Delete a document
-router.delete("/:documentId", deleteDocument);
+// Sync with govt records - Captain manual refresh
+router.post("/sync", authorizeRole("CAPTAIN"), syncWithGovtRecords);
+
+// Delete a document (Captain only)
+router.delete("/:documentId", authorizeRole("CAPTAIN"), deleteDocument);
+
+// Admin routes
+// Verify a document with OCR (Admin only)
+router.post("/:documentId/verify", authorizeRole("ADMIN"), verifyDocument);
+
+// Manually trigger expiry check (Admin only)
+router.post("/check-expiry", authorizeRole("ADMIN"), checkExpiredDocuments);
 
 export default router;

@@ -244,6 +244,286 @@ export const initSocket = (httpServer: HttpServer) => {
             }
         });
 
+        // ============ WebRTC In-App Calling (Privacy-First) ============
+        // No phone numbers exchanged - browser-to-browser calling via WebRTC
+
+        /**
+         * Initiate a call to the other party in the ride
+         */
+        socket.on("CALL_INITIATE", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const ride = await prisma.ride.findUnique({
+                    where: { id: data.rideId },
+                    select: {
+                        id: true,
+                        status: true,
+                        riderId: true,
+                        captain: {
+                            select: { userId: true }
+                        }
+                    }
+                });
+
+                if (!ride || !['ACCEPTED', 'ARRIVED', 'ONGOING'].includes(ride.status)) {
+                    socket.emit("CALL_ERROR", { message: "Call not available for this ride" });
+                    return;
+                }
+
+                const isRider = ride.riderId === userId;
+                const isCaptain = ride.captain?.userId === userId;
+
+                if (!isRider && !isCaptain) {
+                    socket.emit("CALL_ERROR", { message: "You are not part of this ride" });
+                    return;
+                }
+
+                // Get caller info
+                const caller = await prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { fullName: true, role: true }
+                });
+
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                if (recipientId) {
+                    // Store call state in Redis
+                    await redis.setex(`call:${data.rideId}`, 120, JSON.stringify({
+                        callerId: userId,
+                        recipientId,
+                        status: 'ringing',
+                        startedAt: Date.now()
+                    }));
+
+                    sendNotification(recipientId, "INCOMING_CALL", {
+                        rideId: data.rideId,
+                        callerId: userId,
+                        callerName: caller?.fullName || "User",
+                        callerRole: caller?.role
+                    });
+                }
+            } catch (error) {
+                console.error("Error initiating call:", error);
+                socket.emit("CALL_ERROR", { message: "Failed to initiate call" });
+            }
+        });
+
+        /**
+         * Accept incoming call
+         */
+        socket.on("CALL_ACCEPT", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const callState = await redis.get(`call:${data.rideId}`);
+                if (!callState) {
+                    socket.emit("CALL_ERROR", { message: "Call not found or expired" });
+                    return;
+                }
+
+                const call = JSON.parse(callState);
+                
+                if (call.recipientId !== userId) {
+                    socket.emit("CALL_ERROR", { message: "Unauthorized" });
+                    return;
+                }
+
+                // Update call state
+                await redis.setex(`call:${data.rideId}`, 3600, JSON.stringify({
+                    ...call,
+                    status: 'connected',
+                    connectedAt: Date.now()
+                }));
+
+                sendNotification(call.callerId, "CALL_ACCEPTED", {
+                    rideId: data.rideId
+                });
+
+            } catch (error) {
+                console.error("Error accepting call:", error);
+            }
+        });
+
+        /**
+         * Reject/decline incoming call
+         */
+        socket.on("CALL_REJECT", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const callState = await redis.get(`call:${data.rideId}`);
+                if (!callState) return;
+
+                const call = JSON.parse(callState);
+                await redis.del(`call:${data.rideId}`);
+
+                sendNotification(call.callerId, "CALL_REJECTED", {
+                    rideId: data.rideId
+                });
+            } catch (error) {
+                console.error("Error rejecting call:", error);
+            }
+        });
+
+        /**
+         * End ongoing call
+         */
+        socket.on("CALL_END", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const callState = await redis.get(`call:${data.rideId}`);
+                if (!callState) return;
+
+                const call = JSON.parse(callState);
+                await redis.del(`call:${data.rideId}`);
+
+                // Notify the other party
+                const otherPartyId = call.callerId === userId ? call.recipientId : call.callerId;
+                sendNotification(otherPartyId, "CALL_ENDED", {
+                    rideId: data.rideId
+                });
+            } catch (error) {
+                console.error("Error ending call:", error);
+            }
+        });
+
+        /**
+         * WebRTC Signaling: Offer
+         */
+        socket.on("WEBRTC_OFFER", async (data: { rideId: number; offer: any }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const ride = await prisma.ride.findUnique({
+                    where: { id: data.rideId },
+                    select: {
+                        riderId: true,
+                        captain: { select: { userId: true } }
+                    }
+                });
+
+                if (!ride) return;
+
+                const isRider = ride.riderId === userId;
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                if (recipientId) {
+                    sendNotification(recipientId, "WEBRTC_OFFER", {
+                        rideId: data.rideId,
+                        offer: data.offer,
+                        fromUserId: userId
+                    });
+                }
+            } catch (error) {
+                console.error("Error sending WebRTC offer:", error);
+            }
+        });
+
+        /**
+         * WebRTC Signaling: Answer
+         */
+        socket.on("WEBRTC_ANSWER", async (data: { rideId: number; answer: any }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const ride = await prisma.ride.findUnique({
+                    where: { id: data.rideId },
+                    select: {
+                        riderId: true,
+                        captain: { select: { userId: true } }
+                    }
+                });
+
+                if (!ride) return;
+
+                const isRider = ride.riderId === userId;
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                if (recipientId) {
+                    sendNotification(recipientId, "WEBRTC_ANSWER", {
+                        rideId: data.rideId,
+                        answer: data.answer,
+                        fromUserId: userId
+                    });
+                }
+            } catch (error) {
+                console.error("Error sending WebRTC answer:", error);
+            }
+        });
+
+        /**
+         * WebRTC Signaling: ICE Candidate
+         */
+        socket.on("WEBRTC_ICE_CANDIDATE", async (data: { rideId: number; candidate: any }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            try {
+                const ride = await prisma.ride.findUnique({
+                    where: { id: data.rideId },
+                    select: {
+                        riderId: true,
+                        captain: { select: { userId: true } }
+                    }
+                });
+
+                if (!ride) return;
+
+                const isRider = ride.riderId === userId;
+                const recipientId = isRider ? ride.captain?.userId : ride.riderId;
+
+                if (recipientId) {
+                    sendNotification(recipientId, "WEBRTC_ICE_CANDIDATE", {
+                        rideId: data.rideId,
+                        candidate: data.candidate,
+                        fromUserId: userId
+                    });
+                }
+            } catch (error) {
+                console.error("Error sending ICE candidate:", error);
+            }
+        });
+
+        // ============ Bidding System Socket Events ============
+
+        /**
+         * Captain submits a bid on a ride
+         */
+        socket.on("SUBMIT_BID", async (data: { rideId: number; offerAmount: number; estimatedArrival?: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId || socket.user?.role !== 'CAPTAIN') return;
+
+            // Import and call bidding service - handled by controller
+            // Just emit confirmation
+            socket.emit("BID_SUBMITTED", {
+                rideId: data.rideId,
+                message: "Processing your bid..."
+            });
+        });
+
+        /**
+         * Real-time bid updates to rider
+         */
+        socket.on("WATCH_BIDS", async (data: { rideId: number }) => {
+            const userId = socket.user?.userId;
+            if (!userId) return;
+
+            // Join a room for this ride's bids
+            socket.join(`ride_bids_${data.rideId}`);
+        });
+
+        socket.on("UNWATCH_BIDS", async (data: { rideId: number }) => {
+            socket.leave(`ride_bids_${data.rideId}`);
+        });
+
         socket.on("disconnect", async () => {
             if(userId) {
                 if(socket.user?.role === 'CAPTAIN') {

@@ -1,8 +1,9 @@
 import { authenticate } from "./authMiddelwares";
-import { authorizeRole, authorizeAdmin } from "./roleMiddlewares";
+import { authorizeRole, authorizeAdmin, attachCaptainProfile } from "./roleMiddlewares";
 
 export {
     authenticate,
     authorizeRole,
-    authorizeAdmin
+    authorizeAdmin,
+    attachCaptainProfile
 };
