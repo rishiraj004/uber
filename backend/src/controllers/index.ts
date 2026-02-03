@@ -4,6 +4,18 @@ import { getCaptainStatus, toggleAvailability, getNearbyCaptains, updateLocation
 import { submitReview, getReviewsForUser, checkReviewStatus } from "./reviewController";
 import { updateRiderAddresses, getRiderAddresses, uploadCaptainDocument, getCaptainDocuments, getFullProfile } from "./profileController";
 import { sendChatMessage, getChatMessages } from "./chatController";
+import { 
+    getSetupIntent, 
+    getUserPaymentMethods, 
+    removePaymentMethod, 
+    initializeCaptainStripe,
+    getCaptainStripeStatus,
+    getCaptainOnboarding,
+    getCaptainWallet,
+    createWithdrawal,
+    getWithdrawals 
+} from "./paymentController";
+import { registerFcmToken, unregisterFcmToken } from "./notificationController";
 
 export {
     signup,
@@ -32,5 +44,16 @@ export {
     getCaptainDocuments,
     getFullProfile,
     sendChatMessage,
-    getChatMessages
+    getChatMessages,
+    getSetupIntent,
+    getUserPaymentMethods,
+    removePaymentMethod,
+    initializeCaptainStripe,
+    getCaptainStripeStatus,
+    getCaptainOnboarding,
+    getCaptainWallet,
+    createWithdrawal,
+    getWithdrawals,
+    registerFcmToken,
+    unregisterFcmToken
 };

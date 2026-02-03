@@ -9,6 +9,8 @@ import chatRoutes from '../v1/chatRoutes';
 import documentRoutes from '../v1/documentRoutes';
 import adminRoutes from '../v1/adminRoutes';
 import sosRoutes from '../v1/sosRoutes';
+import paymentRoutes from '../v1/paymentRoutes';
+import notificationRoutes from '../v1/notificationRoutes';
 
 const router = Router();
 
@@ -22,5 +24,7 @@ router.use('/chat', chatRoutes);
 router.use('/documents', documentRoutes);
 router.use('/admin', adminRoutes);
 router.use('/sos', sosRoutes);
+router.use('/payment', paymentRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;

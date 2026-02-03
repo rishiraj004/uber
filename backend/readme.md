@@ -11,7 +11,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
 ## Auth
 
 - POST `/api/v1/auth/signup`
-
   - Description: Create a new user (RIDER or CAPTAIN). Creates a `RiderProfile` or `CaptainProfile` depending on role.
   - Body (application/json):
     - `email` (string) - required
@@ -30,7 +29,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - `token`: JWT string
 
 - POST `/api/v1/auth/login`
-
   - Description: Authenticate user and return a JWT.
   - Body (application/json):
     - `email` (string)
@@ -50,7 +48,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
 ## Captain (requires `CAPTAIN` role where noted)
 
 - PATCH `/api/v1/captain/toggle-status` (authenticated, role: CAPTAIN)
-
   - Description: Toggle captain online/offline. When going online: creates a `Shift` with `startTime`. When going offline: closes the active `Shift` by setting `endTime`.
   - Body: none
   - Response 200:
@@ -58,7 +55,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - `isOnline`: boolean
 
 - POST `/api/v1/captain/update-location` (authenticated, role: CAPTAIN)
-
   - Description: Update captain's current location (stores in `CaptainProfile` and Redis geo set).
   - Body (application/json):
     - `latitude` (number)
@@ -69,7 +65,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - `isOnline`: boolean
 
 - GET `/api/v1/captain/nearby` (authenticated, role: RIDER)
-
   - Query params:
     - `latitude` (number) - required
     - `longitude` (number) - required
@@ -83,7 +78,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
       - `rating` (number)
 
 - GET `/api/v1/captain/status` (authenticated, role: CAPTAIN)
-
   - Description: Returns online/available status of the captain.
   - Response 200:
     - `isOnline`: boolean
@@ -102,7 +96,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
 ## Ride
 
 - GET `/api/v1/ride/details/:userId` (authenticated)
-
   - Description: Fetch the most recent active ride for the user. If request made by a RIDER, returns ride info including captain details. If made by a CAPTAIN, returns ride info including rider details (flattened fields).
   - Params:
     - `userId` (number) - path param
@@ -114,7 +107,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
         - `rideId`, `status`, `riderName`, `pickupAddress`, `dropoffAddress`, `pickupLat`, `pickupLng`, `dropoffLat`, `dropoffLng`, `fare`, `otp`
 
 - POST `/api/v1/ride/calculate-fare` (authenticated, role: RIDER)
-
   - Body (application/json):
     - `vehicleType` ("CAR"|"BIKE"|"AUTO")
     - `pickupCoords`: { `lat`: number, `lng`: number }
@@ -123,7 +115,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - `estimatedCost`: number
 
 - POST `/api/v1/ride/create-ride` (authenticated, role: RIDER)
-
   - Body (application/json):
     - `vehicleType`: "CAR"|"BIKE"|"AUTO"
     - `pickupCoords`: { `lat`, `lng` }
@@ -136,7 +127,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
   - Notes: New ride notifies nearby captains via socket events; notifications are sent to captain user IDs.
 
 - POST `/api/v1/ride/accept-ride` (authenticated, role: CAPTAIN)
-
   - Body (application/json):
     - `rideId` (number)
   - Response 200:
@@ -145,7 +135,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
   - Notes: Sets `captainId` on `Ride` (stores `CaptainProfile.id`) and marks `CaptainProfile.isAvailable = false`.
 
 - POST `/api/v1/ride/arrived-at-pickup` (authenticated, role: CAPTAIN)
-
   - Body (application/json):
     - `rideId` (number)
   - Response 200:
@@ -153,7 +142,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - `ride`: updated ride object (status `ARRIVED`)
 
 - POST `/api/v1/ride/start-ride` (authenticated, role: CAPTAIN)
-
   - Body (application/json):
     - `rideId` (number)
     - `otp` (string)
@@ -162,7 +150,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - `ride`: updated ride object (status `ONGOING`, `startedAt` set)
 
 - POST `/api/v1/ride/complete-ride` (authenticated, role: CAPTAIN)
-
   - Body (application/json):
     - `rideId` (number)
   - Response 200:
@@ -173,7 +160,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
   - Notes: Marks `CaptainProfile.isAvailable = true` on completion.
 
 - POST `/api/v1/ride/cancel-ride` (authenticated)
-
   - Body (application/json):
     - `rideId` (number)
   - Response 200:
@@ -193,7 +179,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
 ## WebSocket Events (socket.io)
 
 - Client emits: `CAPTAIN_LOCATION_UPDATE` with `{ location: { latitude, longitude } }` (authenticated socket)
-
   - Server updates `CaptainProfile` location, stores location in Redis (using `CaptainProfile.id`) and creates `RideLocationLog` entries for ongoing rides (every ~10s).
 
 - Server emits (examples):
@@ -206,7 +191,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
 ## Review
 
 - POST `/api/v1/review/submit` (authenticated)
-
   - Description: Submit a review for a completed ride. Recalculates and updates the reviewee's average rating.
   - Body (application/json):
     - `rideId` (number) - required
@@ -222,7 +206,6 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
     - Cannot submit duplicate reviews
 
 - GET `/api/v1/review/user/:userId` (authenticated)
-
   - Description: Get all reviews received by a specific user.
   - Params:
     - `userId` (number)
@@ -236,5 +219,52 @@ Authentication: Most endpoints require a Bearer token in the `Authorization` hea
   - Response 200:
     - `hasReviewed`: boolean
     - `review`: review object or null
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the backend directory with the following variables:
+
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/uber_clone"
+
+# JWT
+JWT_SECRET="your-jwt-secret"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# Mapbox (for routing)
+MAPBOX_ACCESS_TOKEN="your-mapbox-token"
+
+# Razorpay Payment Gateway
+RAZORPAY_KEY_ID="rzp_test_xxxxx"
+RAZORPAY_KEY_SECRET="xxxxx"
+
+# Firebase (for push notifications)
+FIREBASE_PROJECT_ID="your-project-id"
+FIREBASE_CLIENT_EMAIL="firebase-adminsdk@your-project.iam.gserviceaccount.com"
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Frontend URL (for redirects)
+FRONTEND_URL="http://localhost:5173"
+```
+
+### Razorpay Setup
+
+1. Create an account at [Razorpay Dashboard](https://dashboard.razorpay.com)
+2. Get your API keys from Settings > API Keys
+3. For testing, use test mode keys (prefix `rzp_test_`)
+4. For production, use live mode keys (prefix `rzp_live_`)
+
+### Payment Flow
+
+1. **Create Order**: When a ride is accepted, a Razorpay order is created
+2. **Checkout**: Frontend uses Razorpay Checkout to capture payment
+3. **Verify**: Backend verifies the payment signature
+4. **Capture**: Payment is captured when ride is completed
+5. **Refund**: If ride is cancelled, payment is refunded
 
 ---

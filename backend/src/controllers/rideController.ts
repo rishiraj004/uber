@@ -5,14 +5,17 @@ import crypto from "crypto";
 import { findNearbyCaptains } from "../services/mapService";
 import { distanceBetweenPoints, calculateTotalPathDistance, calculateTotalTime } from "../utils";
 import { sendNotification } from "../config/socket";
-import { calculateRideFare } from "../services/rideService";
+import { calculateRideFare, calculateAllFareOptions, VehicleClass } from "../services/rideService";
 import { getDistanceAndDuration } from "../services/mapService";
+import { calculateSurgeMultiplier, getSurgeInfo } from "../services/surgeService";
+import { authorizePayment, capturePayment, cancelPayment, getOrCreateRazorpayCustomer } from "../services/paymentService";
+import { sendPushNotification } from "../services/pushNotificationService";
 
 export const calculateFare = async ( req: AuthRequest, res: Response) => {
     try {
-        const { vehicleType , pickupCoords , destCoords } = req.body;
-        if(!vehicleType || !pickupCoords || !destCoords) {
-            return res.status(400).json({ message: "Vehicle type, pickup and destination coordinates are required." });
+        const { vehicleType, vehicleClass, pickupCoords, destCoords } = req.body;
+        if(!pickupCoords || !destCoords) {
+            return res.status(400).json({ message: "Pickup and destination coordinates are required." });
         }
         const result = await getDistanceAndDuration(
             [pickupCoords.lat, pickupCoords.lng],
@@ -24,11 +27,40 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
         }
         
         const { distanceKm, durationMinutes } = result;
-        const fare = calculateRideFare(distanceKm, durationMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');
+        
+        // Get surge multiplier based on pickup location
+        const surgeMultiplier = await calculateSurgeMultiplier(pickupCoords.lat, pickupCoords.lng);
+        const surgeInfo = await getSurgeInfo(pickupCoords.lat, pickupCoords.lng);
+
+        // If specific vehicle type requested, return single fare
+        if (vehicleType) {
+            const fare = calculateRideFare(
+                distanceKm, 
+                durationMinutes, 
+                vehicleType as 'CAR' | 'BIKE' | 'AUTO',
+                (vehicleClass as VehicleClass) || 'ECONOMY',
+                surgeMultiplier
+            );
+            return res.status(200).json({ 
+                estimatedCost: parseFloat(fare.toFixed(2)),
+                distanceKm: parseFloat(distanceKm.toFixed(2)),
+                durationMinutes: parseFloat(durationMinutes.toFixed(2)),
+                surgeMultiplier,
+                surgeActive: surgeInfo.isActive,
+                surgeMessage: surgeInfo.displayText
+            });
+        }
+
+        // Return all fare options with surge applied
+        const fareOptions = calculateAllFareOptions(distanceKm, durationMinutes, surgeMultiplier);
+        
         res.status(200).json({ 
-            estimatedCost: parseFloat(fare.toFixed(2)),
+            fareOptions,
             distanceKm: parseFloat(distanceKm.toFixed(2)),
-            durationMinutes: parseFloat(durationMinutes.toFixed(2))
+            durationMinutes: parseFloat(durationMinutes.toFixed(2)),
+            surgeMultiplier,
+            surgeActive: surgeInfo.isActive,
+            surgeMessage: surgeInfo.displayText
         });
     } catch (error) {
         console.error("Error calculating fare:", error);
@@ -299,7 +331,7 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
 
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {
-        const { vehicleType , pickupCoords , destCoords , pickup , destination } = req.body;
+        const { vehicleType, vehicleClass, pickupCoords, destCoords, pickup, destination } = req.body;
 
         if(!vehicleType || !pickupCoords || !destCoords || !pickup || !destination) {
             return res.status(400).json({ message: "All ride details are required." });
@@ -307,7 +339,7 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
 
         const riderId = req.user?.userId;
         
-        // Get rider info including rating
+        // Get rider info including rating and Stripe customer ID
         const riderInfo = await prisma.user.findUnique({ 
             where: { id: riderId! },
             include: {
@@ -332,8 +364,21 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         }
 
         const { distanceKm, durationMinutes, geometry } = routeData;
+        
+        // Calculate surge multiplier
+        const surgeMultiplier = await calculateSurgeMultiplier(pickupCoords.lat, pickupCoords.lng);
+        
+        // Calculate fare with surge and vehicle class
+        const selectedVehicleClass = (vehicleClass as VehicleClass) || 'ECONOMY';
+        const fare = calculateRideFare(
+            distanceKm, 
+            durationMinutes, 
+            vehicleType as 'CAR' | 'BIKE' | 'AUTO',
+            selectedVehicleClass,
+            surgeMultiplier
+        );
+        
         const otp = crypto.randomInt(1000, 9999).toString();
-        const fare = calculateRideFare(distanceKm, durationMinutes, vehicleType as 'CAR' | 'BIKE' | 'AUTO');
         
         const newRide = await prisma.ride.create({
             data: {
@@ -345,7 +390,9 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                 dropoffLat: destCoords.lat,
                 dropoffLng: destCoords.lng,
                 vehicleType: vehicleType,
+                vehicleClass: selectedVehicleClass,
                 fare: parseFloat(fare.toFixed(2)),
+                surgeMultiplier: surgeMultiplier,
                 estimatedDistance: parseFloat(distanceKm.toFixed(2)),
                 estimatedDuration: parseFloat(durationMinutes.toFixed(2)),
                 routeGeometry: geometry ? JSON.stringify(geometry) : null,
@@ -355,11 +402,15 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         });
 
         // Start dynamic captain dispatching with radius expansion
-        startCaptainDispatch(newRide.id, pickupCoords.lat, pickupCoords.lng, riderName, riderRating, distanceKm, durationMinutes);
+        startCaptainDispatch(newRide.id, pickupCoords.lat, pickupCoords.lng, riderName, riderRating, distanceKm, durationMinutes, selectedVehicleClass);
 
         res.status(201).json({ 
             message: "Ride created successfully",
-            ride: newRide 
+            ride: {
+                ...newRide,
+                surgeMultiplier,
+                surgeApplied: surgeMultiplier > 1.0
+            }
         });
     } catch (error) {
         console.error("Error creating ride:", error);
@@ -377,7 +428,8 @@ const startCaptainDispatch = async (
     riderName: string,
     riderRating: number,
     distanceKm: number,
-    durationMinutes: number
+    durationMinutes: number,
+    vehicleClass: VehicleClass = 'ECONOMY'
 ) => {
     let currentRadius = 3; // Start with 3km radius
     const maxRadius = 15; // Maximum 15km radius
@@ -516,13 +568,29 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
-        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+        const ride = await prisma.ride.findUnique({ 
+            where: { id: Number(rideId) },
+            include: { rider: true }
+        });
         if(!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
 
         if(ride.status !== "PENDING") {
             return res.status(400).json({ message: "Ride is no longer available." });
+        }
+
+        // Authorize payment (create Razorpay order)
+        let paymentOrderId: string | null = null;
+        try {
+            if (ride.rider.stripeCustomerId && ride.fare) {
+                // stripeCustomerId field is reused for Razorpay customer ID
+                paymentOrderId = await authorizePayment(ride.id, ride.fare, ride.rider.stripeCustomerId);
+            }
+        } catch (paymentError: any) {
+            console.error("Payment authorization failed:", paymentError);
+            // Continue without payment if Razorpay is not configured
+            // In production, you might want to reject the ride here
         }
 
         const [updatedRide] = await prisma.$transaction([
@@ -626,11 +694,19 @@ export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
             where: { id: Number(rideId) },
             data: { status: "ARRIVED" },
         });
+
+        // Send socket notification
         sendNotification(updatedRide.riderId , "CAPTAIN_ARRIVED", {
             rideId: updatedRide.id,
             status: updatedRide.status,
             message: "Your captain has arrived at the pickup location."
         });
+
+        // Send push notification (critical - works when app is in background)
+        await sendPushNotification(updatedRide.riderId, 'CAPTAIN_ARRIVED', {
+            rideId: updatedRide.id
+        });
+
         res.status(200).json({
             message: "Marked arrival at pickup successfully",
             ride: updatedRide 
@@ -686,9 +762,15 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             data: { status: "ONGOING", otp: null, startedAt: new Date() },
         });
 
+        // Send socket notification
         sendNotification(ongoingRide.riderId , "RIDE_STARTED", {
             rideId: ongoingRide.id,
             status: ongoingRide.status
+        });
+
+        // Send push notification
+        await sendPushNotification(ongoingRide.riderId, 'RIDE_STARTED', {
+            rideId: ongoingRide.id
         });
 
         res.status(200).json({ 
@@ -738,6 +820,16 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: `Cannot complete ride in ${ride.status} status.` });
         }
 
+        // Capture payment (charge the rider's card)
+        let paymentCaptured = false;
+        try {
+            await capturePayment(ride.id);
+            paymentCaptured = true;
+        } catch (paymentError: any) {
+            console.error("Payment capture failed:", paymentError);
+            // Continue - payment can be retried or handled manually
+        }
+
         // Use the upfront fare stored when ride was created
         // This ensures riders are charged what they were quoted, not penalized for captain detours
         const finalFare = ride.fare;
@@ -761,10 +853,12 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             })
         ]);
 
+        // Send socket notification
         sendNotification(completedRide.riderId , "RIDE_COMPLETED", {
             rideId: completedRide.id,
             status: completedRide.status,
             fare: finalFare,
+            paymentCaptured,
             estimatedDistance: ride.estimatedDistance,
             estimatedDuration: ride.estimatedDuration,
             actualDistance: parseFloat(actualDistance.toFixed(2)),
@@ -772,9 +866,16 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             message: "Thank you for riding with us!"
         });
 
+        // Send push notification (works even if app is in background)
+        await sendPushNotification(completedRide.riderId, 'RIDE_COMPLETED', {
+            rideId: completedRide.id,
+            fare: finalFare
+        });
+
         res.status(200).json({ 
             message: "Ride completed successfully",
             ride: completedRide,
+            paymentCaptured,
             estimatedDistance: ride.estimatedDistance,
             estimatedDuration: ride.estimatedDuration,
             actualDistance: parseFloat(actualDistance.toFixed(2)),
@@ -822,6 +923,15 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
         if(ride.status === "COMPLETED" || ride.status === "CANCELLED") {
             return res.status(400).json({ message: `Cannot cancel ride in ${ride.status} status.` });
         }
+
+        // Cancel/void any authorized payment
+        try {
+            await cancelPayment(ride.id);
+        } catch (paymentError) {
+            console.error("Payment cancellation failed:", paymentError);
+            // Continue with ride cancellation even if payment cancellation fails
+        }
+
         const cancelledRide = await prisma.ride.update({
             where: { id: Number(rideId) },
             data: { status: "CANCELLED" },
@@ -1087,6 +1197,30 @@ export const getRideHistoryDetail = async (req: AuthRequest, res: Response) => {
         });
     } catch (error) {
         console.error("Error fetching ride detail:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Check surge pricing for a location
+ */
+export const checkSurge = async (req: AuthRequest, res: Response) => {
+    try {
+        const { lat, lng } = req.body;
+
+        if (!lat || !lng) {
+            return res.status(400).json({ message: "Latitude and longitude are required" });
+        }
+
+        const surgeInfo = await getSurgeInfo(lat, lng);
+
+        res.status(200).json({
+            surgeMultiplier: surgeInfo.multiplier,
+            surgeActive: surgeInfo.isActive,
+            message: surgeInfo.displayText
+        });
+    } catch (error) {
+        console.error("Error checking surge:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
