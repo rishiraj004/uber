@@ -1,6 +1,7 @@
 import razorpay from '../config/razorpay';
 import prisma from '../config/prisma';
 import crypto from 'crypto';
+import { sendNotification } from '../config/socket';
 
 /**
  * Payment Service - Handles all Razorpay payment operations
@@ -226,15 +227,47 @@ export const confirmPayment = async (
         throw new Error('Invalid payment signature');
     }
 
-    // Update payment with Razorpay payment ID and mark as authorized
+    // Get ride details for socket notification
+    const ride = await prisma.ride.findUnique({
+        where: { id: rideId },
+        select: { 
+            id: true, 
+            fare: true, 
+            riderId: true, 
+            captainId: true,
+            captain: { select: { userId: true } }
+        }
+    });
+
+    // Update payment with Razorpay payment ID and mark as captured (auto-capture enabled)
     await prisma.payment.update({
         where: { rideId },
         data: {
             stripePaymentIntentId: razorpayPaymentId, // Store the actual payment ID
-            status: 'AUTHORIZED',
-            authorizedAt: new Date()
+            status: 'CAPTURED',
+            authorizedAt: new Date(),
+            capturedAt: new Date()
         }
     });
+
+    // Update ride payment status
+    await prisma.ride.update({
+        where: { id: rideId },
+        data: {
+            paymentStatus: 'CAPTURED',
+            paymentCollectedAt: new Date()
+        }
+    });
+
+    // Notify captain that payment was successful
+    if (ride?.captain?.userId) {
+        sendNotification(ride.captain.userId, "PAYMENT_SUCCESSFUL", {
+            rideId: ride.id,
+            amount: ride.fare,
+            paymentMethod: 'RAZORPAY',
+            message: `Payment of ₹${ride.fare} received successfully`
+        });
+    }
 
     return { success: true, message: 'Payment confirmed successfully' };
 };

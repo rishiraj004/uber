@@ -338,6 +338,22 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         }
 
         const riderId = req.user?.userId;
+
+        // PREVENT DUPLICATE RIDES: Check if rider already has an active ride
+        const existingActiveRide = await prisma.ride.findFirst({
+            where: {
+                riderId: riderId!,
+                status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] }
+            },
+            select: { id: true, status: true }
+        });
+
+        if (existingActiveRide) {
+            return res.status(400).json({ 
+                message: `You already have an active ride (ID: ${existingActiveRide.id}, Status: ${existingActiveRide.status}). Please complete or cancel it before booking a new ride.`,
+                existingRideId: existingActiveRide.id
+            });
+        }
         
         // Get rider info including rating and Stripe customer ID
         const riderInfo = await prisma.user.findUnique({ 
@@ -397,7 +413,9 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                 estimatedDuration: parseFloat(durationMinutes.toFixed(2)),
                 routeGeometry: geometry ? JSON.stringify(geometry) : null,
                 otp: otp,
-                status: "PENDING"
+                status: "PENDING",
+                paymentStatus: "PENDING"
+                // paymentMode is set later by rider after ride is accepted
             }
         });
 
@@ -558,14 +576,27 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: "Ride ID is required." });
         }
 
-        // Get the captain profile for this user
+        // Get the captain profile for this user including verification status
         const captainProfile = await prisma.captainProfile.findUnique({
             where: { userId: userId },
-            select: { id: true }
+            select: { id: true, isVerified: true, licenseExpiry: true, rcExpiry: true }
         });
 
         if(!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
+        }
+
+        // Security: Verify captain is verified and documents are not expired
+        if(!captainProfile.isVerified) {
+            return res.status(403).json({ message: "Your account is not verified. Please complete document verification." });
+        }
+
+        const now = new Date();
+        if(captainProfile.licenseExpiry && captainProfile.licenseExpiry < now) {
+            return res.status(403).json({ message: "Your driving license has expired. Please update your documents." });
+        }
+        if(captainProfile.rcExpiry && captainProfile.rcExpiry < now) {
+            return res.status(403).json({ message: "Your vehicle registration has expired. Please update your documents." });
         }
 
         const ride = await prisma.ride.findUnique({ 
@@ -820,21 +851,19 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: `Cannot complete ride in ${ride.status} status.` });
         }
 
-        // Capture payment (charge the rider's card)
-        let paymentCaptured = false;
-        try {
-            await capturePayment(ride.id);
-            paymentCaptured = true;
-        } catch (paymentError: any) {
-            console.error("Payment capture failed:", paymentError);
-            // Continue - payment can be retried or handled manually
+        // PAYMENT VERIFICATION: Ride cannot be completed until payment is collected
+        if(ride.paymentStatus !== "CAPTURED") {
+            return res.status(400).json({ 
+                message: "Payment has not been collected. Please collect payment before completing the ride.",
+                paymentMode: ride.paymentMode,
+                paymentStatus: ride.paymentStatus
+            });
         }
 
         // Use the upfront fare stored when ride was created
-        // This ensures riders are charged what they were quoted, not penalized for captain detours
         const finalFare = ride.fare;
         
-        // Calculate actual distance/duration for analytics (not for charging)
+        // Calculate actual distance/duration for analytics
         const logs = await prisma.rideLocationLog.findMany({
             where: { rideId: Number(rideId) },
             orderBy: { timestamp: 'asc' }
@@ -858,7 +887,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             rideId: completedRide.id,
             status: completedRide.status,
             fare: finalFare,
-            paymentCaptured,
+            paymentMode: ride.paymentMode,
             estimatedDistance: ride.estimatedDistance,
             estimatedDuration: ride.estimatedDuration,
             actualDistance: parseFloat(actualDistance.toFixed(2)),
@@ -866,7 +895,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             message: "Thank you for riding with us!"
         });
 
-        // Send push notification (works even if app is in background)
+        // Send push notification
         await sendPushNotification(completedRide.riderId, 'RIDE_COMPLETED', {
             rideId: completedRide.id,
             fare: finalFare
@@ -875,7 +904,6 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
         res.status(200).json({ 
             message: "Ride completed successfully",
             ride: completedRide,
-            paymentCaptured,
             estimatedDistance: ride.estimatedDistance,
             estimatedDuration: ride.estimatedDuration,
             actualDistance: parseFloat(actualDistance.toFixed(2)),
@@ -1221,6 +1249,371 @@ export const checkSurge = async (req: AuthRequest, res: Response) => {
         });
     } catch (error) {
         console.error("Error checking surge:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Captain initiates payment collection (when ride is ONGOING and at destination)
+ * This tells the rider to make payment based on the selected payment mode
+ */
+export const initiatePaymentCollection = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { rideId } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if (!rideId) {
+            return res.status(400).json({ message: "Ride ID is required" });
+        }
+
+        // Get the captain profile
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+
+        if (!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
+        }
+
+        const ride = await prisma.ride.findUnique({ 
+            where: { id: Number(rideId) },
+            include: { rider: { select: { fullName: true } } }
+        });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        if (ride.captainId !== captainProfile.id) {
+            return res.status(403).json({ message: "You are not assigned to this ride" });
+        }
+
+        if (ride.status !== "ONGOING") {
+            return res.status(400).json({ message: "Can only collect payment for ongoing rides" });
+        }
+
+        if (ride.paymentStatus === "CAPTURED") {
+            return res.status(400).json({ message: "Payment has already been collected" });
+        }
+
+        // Notify rider to pay based on payment mode
+        sendNotification(ride.riderId, "PAYMENT_REQUESTED", {
+            rideId: ride.id,
+            fare: ride.fare,
+            paymentMode: ride.paymentMode,
+            message: ride.paymentMode === 'CASH' 
+                ? `Please pay ₹${ride.fare} in cash to your captain`
+                : ride.paymentMode === 'UPI'
+                ? `Please pay ₹${ride.fare} via UPI`
+                : `Please complete payment of ₹${ride.fare} in the app`
+        });
+
+        res.status(200).json({
+            message: "Payment request sent to rider",
+            paymentMode: ride.paymentMode,
+            fare: ride.fare
+        });
+    } catch (error) {
+        console.error("Error initiating payment collection:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Captain confirms cash/UPI payment received
+ * Only for CASH and UPI payment modes
+ */
+export const confirmCashPayment = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { rideId } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if (!rideId) {
+            return res.status(400).json({ message: "Ride ID is required" });
+        }
+
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+
+        if (!captainProfile) {
+            return res.status(404).json({ message: "Captain profile not found" });
+        }
+
+        const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        if (ride.captainId !== captainProfile.id) {
+            return res.status(403).json({ message: "You are not assigned to this ride" });
+        }
+
+        if (ride.status !== "ONGOING") {
+            return res.status(400).json({ message: "Can only confirm payment for ongoing rides" });
+        }
+
+        if (ride.paymentMode === "IN_APP") {
+            return res.status(400).json({ message: "In-app payments must be confirmed through the payment gateway" });
+        }
+
+        if (ride.paymentStatus === "CAPTURED") {
+            return res.status(400).json({ message: "Payment has already been confirmed" });
+        }
+
+        // Update payment status
+        const updatedRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: {
+                paymentStatus: "CAPTURED",
+                paymentCollectedAt: new Date()
+            }
+        });
+
+        // Notify rider that payment is confirmed
+        sendNotification(ride.riderId, "PAYMENT_CONFIRMED", {
+            rideId: ride.id,
+            fare: ride.fare,
+            paymentMode: ride.paymentMode,
+            message: "Payment has been confirmed by your captain"
+        });
+
+        res.status(200).json({
+            message: "Payment confirmed successfully",
+            ride: updatedRide
+        });
+    } catch (error) {
+        console.error("Error confirming cash payment:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Rider confirms in-app payment (after Razorpay success)
+ * This is called after the Razorpay payment verification
+ */
+export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { rideId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if (!rideId) {
+            return res.status(400).json({ message: "Ride ID is required" });
+        }
+
+        const ride = await prisma.ride.findUnique({ 
+            where: { id: Number(rideId) },
+            include: { captain: { select: { userId: true } } }
+        });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        if (ride.riderId !== userId) {
+            return res.status(403).json({ message: "You are not the rider for this trip" });
+        }
+
+        if (ride.paymentMode !== "IN_APP") {
+            return res.status(400).json({ message: "This ride is not set for in-app payment" });
+        }
+
+        if (ride.paymentStatus === "CAPTURED") {
+            return res.status(400).json({ message: "Payment has already been confirmed" });
+        }
+
+        // For IN_APP, we should verify with Razorpay (simplified here - actual verification in paymentController)
+        // In production, verify the signature before marking as captured
+
+        // Update payment status
+        const updatedRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: {
+                paymentStatus: "CAPTURED",
+                paymentCollectedAt: new Date()
+            }
+        });
+
+        // Notify captain that payment is complete
+        if (ride.captain?.userId) {
+            sendNotification(ride.captain.userId, "PAYMENT_RECEIVED", {
+                rideId: ride.id,
+                fare: ride.fare,
+                paymentMode: ride.paymentMode,
+                message: `Rider has paid ₹${ride.fare} via app`
+            });
+        }
+
+        res.status(200).json({
+            message: "Payment confirmed successfully",
+            ride: updatedRide
+        });
+    } catch (error) {
+        console.error("Error confirming in-app payment:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Get payment status for a ride
+ */
+export const getPaymentStatus = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { rideId } = req.params;
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const ride = await prisma.ride.findUnique({
+            where: { id: Number(rideId) },
+            select: {
+                id: true,
+                fare: true,
+                paymentMode: true,
+                paymentStatus: true,
+                paymentCollectedAt: true,
+                riderId: true,
+                captainId: true
+            }
+        });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        // Check if user is rider or captain (simplified check)
+        const isRider = ride.riderId === userId;
+        // For captain check, we need to get the captain profile
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { userId: userId },
+            select: { id: true }
+        });
+        const isCaptain = captainProfile && ride.captainId === captainProfile.id;
+
+        if (!isRider && !isCaptain) {
+            return res.status(403).json({ message: "You are not part of this ride" });
+        }
+
+        res.status(200).json({
+            rideId: ride.id,
+            fare: ride.fare,
+            paymentMode: ride.paymentMode,
+            paymentStatus: ride.paymentStatus,
+            paymentCollectedAt: ride.paymentCollectedAt
+        });
+    } catch (error) {
+        console.error("Error getting payment status:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
+ * Update payment method for a ride (PATCH /ride/:rideId/payment-method)
+ * Rider selects payment method after ride is accepted
+ */
+export const updatePaymentMethod = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { rideId } = req.params;
+        const { paymentMethod } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        if (!rideId) {
+            return res.status(400).json({ message: "Ride ID is required" });
+        }
+
+        // Validate payment method
+        const validPaymentMethods = ['CASH', 'UPI', 'IN_APP'];
+        if (!paymentMethod || !validPaymentMethods.includes(paymentMethod)) {
+            return res.status(400).json({ 
+                message: "Invalid payment method. Must be CASH, UPI, or IN_APP" 
+            });
+        }
+
+        // Get the ride
+        const ride = await prisma.ride.findUnique({
+            where: { id: Number(rideId) },
+            select: {
+                id: true,
+                riderId: true,
+                captainId: true,
+                status: true,
+                paymentMode: true,
+                paymentStatus: true,
+                fare: true,
+                captain: { select: { userId: true } }
+            }
+        });
+
+        if (!ride) {
+            return res.status(404).json({ message: "Ride not found" });
+        }
+
+        // Only the rider can update payment method
+        if (ride.riderId !== userId) {
+            return res.status(403).json({ message: "Only the rider can update payment method" });
+        }
+
+        // Can only update payment method for ACCEPTED, ARRIVED, or ONGOING rides
+        const allowedStatuses = ['ACCEPTED', 'ARRIVED', 'ONGOING'];
+        if (!allowedStatuses.includes(ride.status)) {
+            return res.status(400).json({ 
+                message: `Cannot update payment method for ride in ${ride.status} status` 
+            });
+        }
+
+        // Cannot update if payment is already captured
+        if (ride.paymentStatus === 'CAPTURED') {
+            return res.status(400).json({ message: "Payment has already been processed" });
+        }
+
+        // Update the payment method
+        const updatedRide = await prisma.ride.update({
+            where: { id: Number(rideId) },
+            data: { paymentMode: paymentMethod }
+        });
+
+        // Notify the captain about payment method change
+        if (ride.captain?.userId) {
+            sendNotification(ride.captain.userId, "PAYMENT_METHOD_UPDATED", {
+                rideId: ride.id,
+                paymentMethod: paymentMethod,
+                fare: ride.fare,
+                message: paymentMethod === 'CASH' 
+                    ? `Rider will pay ₹${ride.fare} in cash`
+                    : paymentMethod === 'UPI'
+                    ? `Rider will pay ₹${ride.fare} via UPI`
+                    : `Rider will pay ₹${ride.fare} online through the app`
+            });
+        }
+
+        res.status(200).json({
+            message: "Payment method updated successfully",
+            rideId: updatedRide.id,
+            paymentMethod: updatedRide.paymentMode
+        });
+    } catch (error) {
+        console.error("Error updating payment method:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };

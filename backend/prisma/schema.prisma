@@ -56,6 +56,13 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// Payment mode enum - how rider wants to pay
+enum PaymentMode {
+  CASH // Pay cash to captain
+  UPI // Pay via UPI (captain shows QR or shares number)
+  IN_APP // Pay through app (Razorpay)
+}
+
 enum ReviewType {
   RIDER_TO_CAPTAIN
   CAPTAIN_TO_RIDER
@@ -157,6 +164,11 @@ model Ride {
 
   fare            Float?
   surgeMultiplier Float  @default(1.0) // Surge pricing multiplier
+
+  // Payment tracking
+  paymentMode        PaymentMode   @default(CASH) // How rider wants to pay
+  paymentStatus      PaymentStatus @default(PENDING) // Current payment state
+  paymentCollectedAt DateTime? // When payment was collected/confirmed
 
   // New fields for production-grade ride data
   estimatedDistance Float? // Distance in km from Mapbox
@@ -362,7 +374,6 @@ model Shift {
   updatedAt DateTime @updatedAt
 }
 
-// Payment model for Stripe integration
 model Payment {
   id     Int  @id @default(autoincrement())
   ride   Ride @relation("RidePayment", fields: [rideId], references: [id])

@@ -75,6 +75,37 @@ export const findSharedRideMatch = async (
             continue;
         }
 
+        // DIRECTIONALITY CHECK: Ensure new pickup is "ahead" on the route, not behind
+        // Calculate if new pickup is in the same general direction as the existing dropoff
+        const isPickupAhead = await isPointAheadOnRoute(
+            ride.captain.lastLat,
+            ride.captain.lastLng,
+            ride.dropoffLat,
+            ride.dropoffLng,
+            pickupLat,
+            pickupLng
+        );
+
+        if (!isPickupAhead) {
+            // New pickup would require going backwards - skip this ride
+            continue;
+        }
+
+        // DIRECTIONALITY CHECK: Ensure new dropoff is in the same general direction
+        const isDropoffAhead = await isPointAheadOnRoute(
+            pickupLat,
+            pickupLng,
+            ride.dropoffLat,
+            ride.dropoffLng,
+            dropoffLat,
+            dropoffLng
+        );
+
+        if (!isDropoffAhead) {
+            // New dropoff would require going backwards after pickup - skip
+            continue;
+        }
+
         // Calculate detour if we add this new pickup/dropoff
         const detourResult = await calculateDetour(
             ride.captain.lastLat,
@@ -331,6 +362,49 @@ export const initializeSharedRide = async (rideId: number): Promise<void> => {
 };
 
 // Helper functions
+
+/**
+ * Check if a point is "ahead" on the route (in the same general direction)
+ * Uses vector dot product to determine if the point is in the forward direction
+ */
+async function isPointAheadOnRoute(
+    currentLat: number,
+    currentLng: number,
+    destinationLat: number,
+    destinationLng: number,
+    checkPointLat: number,
+    checkPointLng: number
+): Promise<boolean> {
+    // Vector from current position to destination
+    const toDestVectorLat = destinationLat - currentLat;
+    const toDestVectorLng = destinationLng - currentLng;
+
+    // Vector from current position to checkpoint
+    const toCheckVectorLat = checkPointLat - currentLat;
+    const toCheckVectorLng = checkPointLng - currentLng;
+
+    // Dot product: positive means same general direction
+    const dotProduct = (toDestVectorLat * toCheckVectorLat) + (toDestVectorLng * toCheckVectorLng);
+
+    // If dot product is negative, the checkpoint is behind us (wrong direction)
+    if (dotProduct < 0) {
+        return false;
+    }
+
+    // Calculate the angle between vectors using normalized dot product
+    const destMagnitude = Math.sqrt(toDestVectorLat ** 2 + toDestVectorLng ** 2);
+    const checkMagnitude = Math.sqrt(toCheckVectorLat ** 2 + toCheckVectorLng ** 2);
+
+    if (destMagnitude === 0 || checkMagnitude === 0) {
+        return true; // Edge case: same point
+    }
+
+    const cosAngle = dotProduct / (destMagnitude * checkMagnitude);
+    
+    // Allow up to ~60 degree deviation from the direct route (cos(60°) ≈ 0.5)
+    // This ensures we don't match rides that would require significant backtracking
+    return cosAngle >= 0.5;
+}
 
 async function calculateDetour(
     currentLat: number,

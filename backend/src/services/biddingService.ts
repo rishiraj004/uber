@@ -255,54 +255,72 @@ export const getRideBids = async (rideId: number): Promise<any[]> => {
 
 /**
  * Rider selects a bid - assigns captain to ride
+ * Uses optimistic locking to prevent race conditions when multiple captains
+ * might be selected simultaneously
  */
 export const selectBid = async (rideId: number, bidId: number, riderId: number): Promise<any> => {
-    // Verify ride belongs to rider
-    const ride = await prisma.ride.findUnique({
-        where: { id: rideId },
-        select: { riderId: true, status: true, isBiddingEnabled: true }
-    });
+    // Use a transaction with proper isolation to prevent race conditions
+    const result = await prisma.$transaction(async (tx) => {
+        // Re-fetch ride with lock (using findFirst with a write operation intent)
+        const ride = await tx.ride.findUnique({
+            where: { id: rideId },
+            select: { riderId: true, status: true, isBiddingEnabled: true, captainId: true }
+        });
 
-    if (!ride) {
-        throw new Error('Ride not found');
-    }
+        if (!ride) {
+            throw new Error('Ride not found');
+        }
 
-    if (ride.riderId !== riderId) {
-        throw new Error('Unauthorized');
-    }
+        if (ride.riderId !== riderId) {
+            throw new Error('Unauthorized');
+        }
 
-    if (ride.status !== 'PENDING') {
-        throw new Error('Ride is no longer available');
-    }
+        // RACE CONDITION FIX: Check status inside transaction
+        if (ride.status !== 'PENDING') {
+            throw new Error('Ride is no longer available - another bid may have been selected');
+        }
 
-    // Get the selected bid
-    const selectedBid = await prisma.rideBid.findUnique({
-        where: { id: bidId },
-        include: {
-            captain: {
-                select: {
-                    id: true,
-                    userId: true,
-                    rating: true,
-                    vehicleNumber: true,
-                    vehicleModel: true,
-                    vehicleColor: true,
-                    vehicleType: true,
-                    user: { select: { fullName: true } }
+        // Also check if captain already assigned (belt and suspenders)
+        if (ride.captainId) {
+            throw new Error('A captain has already been assigned to this ride');
+        }
+
+        // Get the selected bid
+        const selectedBid = await tx.rideBid.findUnique({
+            where: { id: bidId },
+            include: {
+                captain: {
+                    select: {
+                        id: true,
+                        userId: true,
+                        rating: true,
+                        vehicleNumber: true,
+                        vehicleModel: true,
+                        vehicleColor: true,
+                        vehicleType: true,
+                        isAvailable: true,
+                        user: { select: { fullName: true } }
+                    }
                 }
             }
+        });
+
+        if (!selectedBid || selectedBid.rideId !== rideId) {
+            throw new Error('Invalid bid');
         }
-    });
 
-    if (!selectedBid || selectedBid.rideId !== rideId) {
-        throw new Error('Invalid bid');
-    }
+        if (selectedBid.status !== 'PENDING') {
+            throw new Error('This bid is no longer available');
+        }
 
-    // Generate OTP for ride
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+        // Check if captain is still available
+        if (!selectedBid.captain.isAvailable) {
+            throw new Error('This captain is no longer available');
+        }
 
-    // Update ride with selected captain and agreed price
-    const updatedRide = await prisma.$transaction(async (tx) => {
+        // Generate OTP for ride
+        const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
         // Mark selected bid as SELECTED
         await tx.rideBid.update({
             where: { id: bidId },
@@ -318,8 +336,14 @@ export const selectBid = async (rideId: number, bidId: number, riderId: number):
             data: { status: 'REJECTED' }
         });
 
+        // Mark captain as unavailable
+        await tx.captainProfile.update({
+            where: { id: selectedBid.captainId },
+            data: { isAvailable: false }
+        });
+
         // Update ride
-        return tx.ride.update({
+        const updatedRide = await tx.ride.update({
             where: { id: rideId },
             data: {
                 captainId: selectedBid.captainId,
@@ -343,24 +367,29 @@ export const selectBid = async (rideId: number, bidId: number, riderId: number):
                 }
             }
         });
+
+        return { updatedRide, selectedBid };
+    }, {
+        // Use serializable isolation to prevent concurrent modifications
+        isolationLevel: 'Serializable'
     });
 
-    // Notify selected captain
-    sendNotification(selectedBid.captain.userId, 'BID_SELECTED', {
+    // Notify selected captain (outside transaction)
+    sendNotification(result.selectedBid.captain.userId, 'BID_SELECTED', {
         rideId,
         message: 'Your bid has been accepted! Navigate to pickup.',
-        otp,
+        otp: result.updatedRide.otp,
         pickup: {
-            address: updatedRide.pickupAddress,
-            lat: updatedRide.pickupLat,
-            lng: updatedRide.pickupLng
+            address: result.updatedRide.pickupAddress,
+            lat: result.updatedRide.pickupLat,
+            lng: result.updatedRide.pickupLng
         },
         dropoff: {
-            address: updatedRide.dropoffAddress,
-            lat: updatedRide.dropoffLat,
-            lng: updatedRide.dropoffLng
+            address: result.updatedRide.dropoffAddress,
+            lat: result.updatedRide.dropoffLat,
+            lng: result.updatedRide.dropoffLng
         },
-        fare: selectedBid.offerAmount
+        fare: result.selectedBid.offerAmount
     });
 
     // Notify other captains that their bids were rejected
@@ -384,17 +413,17 @@ export const selectBid = async (rideId: number, bidId: number, riderId: number):
     }
 
     return {
-        ride: updatedRide,
-        agreedPrice: selectedBid.offerAmount,
+        ride: result.updatedRide,
+        agreedPrice: result.selectedBid.offerAmount,
         captain: {
-            id: selectedBid.captain.id,
-            name: selectedBid.captain.user.fullName,
-            rating: selectedBid.captain.rating,
-            vehicleNumber: selectedBid.captain.vehicleNumber,
-            vehicleModel: selectedBid.captain.vehicleModel,
-            vehicleColor: selectedBid.captain.vehicleColor
+            id: result.selectedBid.captain.id,
+            name: result.selectedBid.captain.user.fullName,
+            rating: result.selectedBid.captain.rating,
+            vehicleNumber: result.selectedBid.captain.vehicleNumber,
+            vehicleModel: result.selectedBid.captain.vehicleModel,
+            vehicleColor: result.selectedBid.captain.vehicleColor
         },
-        otp
+        otp: result.updatedRide.otp
     };
 };
 

@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Phone, MessageSquare, ShieldCheck, 
-  XCircle, AlertTriangle, CheckCircle2, Navigation 
+  XCircle, AlertTriangle, CheckCircle2, Navigation,
+  Banknote, Smartphone, CreditCard
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import { useSocket } from '../../context/socket-context';
 import { RideMap } from '../../components/RideMap';
@@ -65,6 +66,14 @@ const RiderTracking = () => {
   // Emergency modal state
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
 
+  // Payment states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'IN_APP' | null>(rideData?.paymentMode || null);
+  const [paymentRequested, setPaymentRequested] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
+  const [showPaymentSelection, setShowPaymentSelection] = useState(!rideData?.paymentMode);
+
   const [path, setPath] = useState<[number, number][]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | undefined>(undefined);
 
@@ -91,6 +100,92 @@ const RiderTracking = () => {
 
   // Live ETA state
   const [captainEta, setCaptainEta] = useState<{ distance: number; duration: number } | null>(null);
+
+  // Razorpay payment handler for IN_APP payments
+  const handleRazorpayPayment = async () => {
+    const fare = rideDetails?.fare || rideData?.fare || 0;
+    const rideId = rideData?.rideId || rideData?.id;
+    
+    if (!rideId || !fare) return;
+    
+    setIsProcessingPayment(true);
+    
+    try {
+      // Create order on backend
+      const orderResponse = await api.post('/payment/create-order', {
+        amount: fare,
+        rideId
+      });
+      
+      const { orderId, amount, currency = 'INR' } = orderResponse.data;
+      
+      // Initialize Razorpay
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_key',
+        amount: amount * 100, // Razorpay expects paise
+        currency,
+        name: 'Uber Clone',
+        description: `Ride Payment #${rideId}`,
+        order_id: orderId,
+        handler: async function (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) {
+          try {
+            // Confirm payment on backend
+            await api.post('/ride/confirm-in-app-payment', {
+              rideId,
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id,
+              signature: response.razorpay_signature
+            });
+            
+            setShowPaymentModal(false);
+            setPaymentRequested(false);
+          } catch (error) {
+            console.error('Payment confirmation failed:', error);
+            alert('Payment confirmation failed. Please contact support.');
+          }
+        },
+        prefill: {
+          name: 'Rider',
+          email: 'rider@example.com',
+        },
+        theme: {
+          color: '#000000'
+        },
+        modal: {
+          ondismiss: function() {
+            setIsProcessingPayment(false);
+          }
+        }
+      };
+      
+      // Open Razorpay checkout
+      const razorpay = new (window as unknown as { Razorpay: new (options: typeof options) => { open: () => void } }).Razorpay(options);
+      razorpay.open();
+    } catch (error) {
+      console.error('Failed to create payment order:', error);
+      alert('Failed to initiate payment. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // Function to update payment method
+  const handleUpdatePaymentMethod = async (method: 'CASH' | 'UPI' | 'IN_APP') => {
+    const rideId = rideData?.rideId || rideData?.id;
+    if (!rideId) return;
+    
+    setIsUpdatingPaymentMethod(true);
+    try {
+      await api.patch(`/ride/${rideId}/payment-method`, { paymentMethod: method });
+      setPaymentMode(method);
+      setShowPaymentSelection(false);
+    } catch (error) {
+      console.error('Failed to update payment method:', error);
+      alert('Failed to update payment method. Please try again.');
+    } finally {
+      setIsUpdatingPaymentMethod(false);
+    }
+  };
 
   // Function to fetch ETA from captain to pickup/dropoff
   const fetchCaptainEta = useCallback(async (captainLat: number, captainLng: number) => {
@@ -180,9 +275,10 @@ const RiderTracking = () => {
         fare: number; 
         estimatedDistance?: number; 
         estimatedDuration?: number;
+        paymentMode?: string;
       }) => { 
         setRideStatus('COMPLETED'); 
-        // Pass complete ride data including fare and distance/duration to receipt
+        // Pass complete ride data including fare, distance/duration and payment mode to receipt
         navigate('/rider-receipt', { 
           state: { 
             ride: {
@@ -190,7 +286,9 @@ const RiderTracking = () => {
               rideId: data.rideId,
               fare: data.fare,
               estimatedDistance: data.estimatedDistance,
-              estimatedDuration: data.estimatedDuration
+              estimatedDuration: data.estimatedDuration,
+              paymentStatus: 'PAID',
+              paymentMode: data.paymentMode || paymentMode
             }
           } 
         }); 
@@ -203,6 +301,17 @@ const RiderTracking = () => {
         }
         // Fetch live ETA on location update (throttled by backend updates ~10s)
         fetchCaptainEta(data.latitude, data.longitude);
+      },
+      PAYMENT_REQUESTED: (data: { rideId: number; fare: number; paymentMode: string }) => {
+        // Captain has requested payment collection
+        setPaymentMode(data.paymentMode as 'CASH' | 'UPI' | 'IN_APP');
+        setPaymentRequested(true);
+        setShowPaymentModal(true);
+      },
+      PAYMENT_CONFIRMED: () => {
+        // Captain confirmed cash/UPI payment
+        setShowPaymentModal(false);
+        setPaymentRequested(false);
       }
     }
     Object.entries(listeners).forEach(([event, handler]) => {
@@ -325,7 +434,7 @@ const RiderTracking = () => {
         )}
 
         {/* 5. OTP & Fare */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
           <div className="bg-zinc-900 text-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl flex flex-col items-center shadow-lg">
              <p className="text-[8px] sm:text-[9px] uppercase opacity-50 tracking-[0.2em] font-black mb-1">Trip OTP</p>
              <h3 className="text-2xl sm:text-3xl font-black tracking-[0.15em]">{rideData?.otp || '5291'}</h3>
@@ -340,6 +449,75 @@ const RiderTracking = () => {
             </div>
           </div>
         </div>
+
+        {/* Payment Method Selection - Show after ride is accepted */}
+        {(rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'ONGOING') && (
+          <div className="mb-4 sm:mb-6">
+            <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+              {paymentMode ? 'Payment Method' : 'Select Payment Method'}
+            </h3>
+            
+            {showPaymentSelection || !paymentMode ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleUpdatePaymentMethod('CASH')}
+                  disabled={isUpdatingPaymentMethod}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl border-2 transition-all ${
+                    paymentMode === 'CASH' 
+                      ? 'border-zinc-900 bg-zinc-50' 
+                      : 'border-zinc-200 hover:border-zinc-300'
+                  } disabled:opacity-50`}
+                >
+                  <Banknote size={18} className={paymentMode === 'CASH' ? 'text-green-600' : 'text-zinc-500'} />
+                  <span className={`text-sm font-medium ${paymentMode === 'CASH' ? 'text-zinc-900' : 'text-zinc-600'}`}>Cash</span>
+                </button>
+                <button
+                  onClick={() => handleUpdatePaymentMethod('UPI')}
+                  disabled={isUpdatingPaymentMethod}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl border-2 transition-all ${
+                    paymentMode === 'UPI' 
+                      ? 'border-zinc-900 bg-zinc-50' 
+                      : 'border-zinc-200 hover:border-zinc-300'
+                  } disabled:opacity-50`}
+                >
+                  <Smartphone size={18} className={paymentMode === 'UPI' ? 'text-purple-600' : 'text-zinc-500'} />
+                  <span className={`text-sm font-medium ${paymentMode === 'UPI' ? 'text-zinc-900' : 'text-zinc-600'}`}>UPI</span>
+                </button>
+                <button
+                  onClick={() => handleUpdatePaymentMethod('IN_APP')}
+                  disabled={isUpdatingPaymentMethod}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl border-2 transition-all ${
+                    paymentMode === 'IN_APP' 
+                      ? 'border-zinc-900 bg-zinc-50' 
+                      : 'border-zinc-200 hover:border-zinc-300'
+                  } disabled:opacity-50`}
+                >
+                  <CreditCard size={18} className={paymentMode === 'IN_APP' ? 'text-blue-600' : 'text-zinc-500'} />
+                  <span className={`text-sm font-medium ${paymentMode === 'IN_APP' ? 'text-zinc-900' : 'text-zinc-600'}`}>Card</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowPaymentSelection(true)}
+                className={`w-full flex items-center justify-between py-3 px-4 rounded-xl border-2 ${
+                  paymentMode === 'CASH' ? 'border-green-200 bg-green-50' :
+                  paymentMode === 'UPI' ? 'border-purple-200 bg-purple-50' :
+                  'border-blue-200 bg-blue-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {paymentMode === 'CASH' && <Banknote size={20} className="text-green-600" />}
+                  {paymentMode === 'UPI' && <Smartphone size={20} className="text-purple-600" />}
+                  {paymentMode === 'IN_APP' && <CreditCard size={20} className="text-blue-600" />}
+                  <span className="font-semibold text-zinc-900">
+                    {paymentMode === 'CASH' ? 'Cash Payment' : paymentMode === 'UPI' ? 'UPI Payment' : 'Card Payment'}
+                  </span>
+                </div>
+                <span className="text-xs text-zinc-500">Change</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between border-t border-gray-100 pt-4 sm:pt-6">
@@ -371,6 +549,115 @@ const RiderTracking = () => {
         driverName={rideDetails?.captainName}
         vehicleNumber={rideDetails?.vehicleNumber}
       />
+
+      {/* Payment Modal */}
+      <AnimatePresence>
+        {showPaymentModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              {/* Payment Header */}
+              <div className="text-center mb-6">
+                <div className={`w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 ${
+                  paymentMode === 'CASH' ? 'bg-green-100' : 
+                  paymentMode === 'UPI' ? 'bg-purple-100' : 'bg-blue-100'
+                }`}>
+                  {paymentMode === 'CASH' && <Banknote size={32} className="text-green-600" />}
+                  {paymentMode === 'UPI' && <Smartphone size={32} className="text-purple-600" />}
+                  {paymentMode === 'IN_APP' && <CreditCard size={32} className="text-blue-600" />}
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Payment Required</h3>
+                <p className="text-gray-500 text-sm mt-1">
+                  {paymentMode === 'CASH' && 'Please pay cash to the driver'}
+                  {paymentMode === 'UPI' && 'Please pay via UPI to the driver'}
+                  {paymentMode === 'IN_APP' && 'Complete payment to finish your ride'}
+                </p>
+              </div>
+
+              {/* Fare Amount */}
+              <div className="bg-gray-50 rounded-2xl p-4 mb-6">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 font-medium">Total Fare</span>
+                  <span className="text-3xl font-black text-gray-900">₹{rideDetails?.fare || rideData?.fare || 0}</span>
+                </div>
+              </div>
+
+              {/* Payment Instructions based on mode */}
+              {paymentMode === 'CASH' && (
+                <div className="bg-green-50 border border-green-100 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-green-800 font-medium">
+                    💵 Hand over <span className="font-bold">₹{rideDetails?.fare || rideData?.fare || 0}</span> in cash to your driver
+                  </p>
+                  <p className="text-xs text-green-600 mt-2">
+                    The driver will confirm payment once received
+                  </p>
+                </div>
+              )}
+
+              {paymentMode === 'UPI' && (
+                <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-purple-800 font-medium">
+                    📱 Pay <span className="font-bold">₹{rideDetails?.fare || rideData?.fare || 0}</span> via UPI to your driver
+                  </p>
+                  <p className="text-xs text-purple-600 mt-2">
+                    Scan the driver's QR code or use their UPI ID
+                  </p>
+                </div>
+              )}
+
+              {paymentMode === 'IN_APP' && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <p className="text-sm text-blue-800 font-medium">
+                      💳 Secure payment via Razorpay
+                    </p>
+                    <p className="text-xs text-blue-600 mt-2">
+                      Click below to complete your payment securely
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={handleRazorpayPayment}
+                    disabled={isProcessingPayment}
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isProcessingPayment ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={20} />
+                        Pay ₹{rideDetails?.fare || rideData?.fare || 0}
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Close button for CASH/UPI */}
+              {(paymentMode === 'CASH' || paymentMode === 'UPI') && (
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  Got it
+                </button>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
 
   );

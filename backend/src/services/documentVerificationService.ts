@@ -342,6 +342,100 @@ export const checkExpiredDocuments = async (): Promise<{
 // ============ SIMULATION FUNCTIONS ============
 // Replace these with actual API calls in production
 
+/**
+ * Robust date parsing helper - handles multiple date formats from OCR
+ * Prevents verification loops from date parsing failures
+ */
+function parseOcrDate(dateString: string | null | undefined): Date | null {
+    if (!dateString) return null;
+    
+    // Common date formats found in Indian documents
+    const formats = [
+        // ISO format: 2028-12-31
+        /^(\d{4})-(\d{2})-(\d{2})$/,
+        // DD/MM/YYYY: 31/12/2028
+        /^(\d{2})\/(\d{2})\/(\d{4})$/,
+        // DD-MM-YYYY: 31-12-2028
+        /^(\d{2})-(\d{2})-(\d{4})$/,
+        // DD.MM.YYYY: 31.12.2028
+        /^(\d{2})\.(\d{2})\.(\d{4})$/,
+        // Month name: 31 Dec 2028 or Dec 31, 2028
+        /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*,?\s*(\d{4})$/i,
+        /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})\s*,?\s*(\d{4})$/i
+    ];
+
+    const monthMap: Record<string, number> = {
+        'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+        'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+    };
+
+    const cleanString = dateString.trim();
+
+    for (const pattern of formats) {
+        const match = cleanString.match(pattern);
+        if (!match) continue;
+
+        try {
+            let year: number, month: number, day: number;
+
+            if (pattern.source.includes('Jan|Feb')) {
+                // Month name format
+                if (pattern.source.startsWith('^(\\d')) {
+                    // DD Month YYYY
+                    day = parseInt(match[1], 10);
+                    month = monthMap[match[2].toLowerCase().slice(0, 3)];
+                    year = parseInt(match[3], 10);
+                } else {
+                    // Month DD, YYYY
+                    month = monthMap[match[1].toLowerCase().slice(0, 3)];
+                    day = parseInt(match[2], 10);
+                    year = parseInt(match[3], 10);
+                }
+            } else if (pattern.source.startsWith('^(\\d{4})')) {
+                // ISO: YYYY-MM-DD
+                year = parseInt(match[1], 10);
+                month = parseInt(match[2], 10) - 1;
+                day = parseInt(match[3], 10);
+            } else {
+                // DD/MM/YYYY or DD-MM-YYYY
+                day = parseInt(match[1], 10);
+                month = parseInt(match[2], 10) - 1;
+                year = parseInt(match[3], 10);
+            }
+
+            // Validate date components
+            if (year < 1900 || year > 2100) continue;
+            if (month < 0 || month > 11) continue;
+            if (day < 1 || day > 31) continue;
+
+            const date = new Date(year, month, day);
+            
+            // Verify the date is valid (e.g., no Feb 30)
+            if (date.getFullYear() === year && 
+                date.getMonth() === month && 
+                date.getDate() === day) {
+                return date;
+            }
+        } catch (e) {
+            continue;
+        }
+    }
+
+    // Fallback: Try native Date parsing
+    try {
+        const fallbackDate = new Date(cleanString);
+        if (!isNaN(fallbackDate.getTime())) {
+            return fallbackDate;
+        }
+    } catch (e) {
+        // Ignore
+    }
+
+    // Could not parse - return null instead of throwing
+    console.warn(`Could not parse OCR date: "${dateString}"`);
+    return null;
+}
+
 async function simulateOCR(documentUrl: string, documentType: string): Promise<OcrResult> {
     // Simulate processing delay
     await new Promise(resolve => setTimeout(resolve, 500));

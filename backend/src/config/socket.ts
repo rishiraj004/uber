@@ -40,12 +40,61 @@ export const initSocket = (httpServer: HttpServer) => {
         }
     });
 
-    io.on("connection", (socket: AuthenicatedSocket) => {
+    io.on("connection", async (socket: AuthenicatedSocket) => {
         const userId = Number(socket.user?.userId);
+        const userRole = socket.user?.role;
 
         if(userId) { 
             userSocketMap.set(userId, socket.id);
             console.log(`User ${userId} connected with socket ID ${socket.id}`);
+
+            // AUTO-REJOIN: Restore socket room membership for active rides after reconnection
+            try {
+                if (userRole === 'RIDER') {
+                    // Rider: Find any active ride and join its room
+                    const activeRide = await prisma.ride.findFirst({
+                        where: {
+                            riderId: userId,
+                            status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] }
+                        },
+                        select: { id: true, isBiddingEnabled: true }
+                    });
+
+                    if (activeRide) {
+                        socket.join(`ride_${activeRide.id}`);
+                        console.log(`Rider ${userId} auto-rejoined room ride_${activeRide.id}`);
+                        
+                        // Also join bidding room if bidding is enabled
+                        if (activeRide.isBiddingEnabled) {
+                            socket.join(`ride_bids_${activeRide.id}`);
+                            console.log(`Rider ${userId} auto-rejoined bidding room ride_bids_${activeRide.id}`);
+                        }
+                    }
+                } else if (userRole === 'CAPTAIN') {
+                    // Captain: Find active ride they're assigned to
+                    const captainProfile = await prisma.captainProfile.findUnique({
+                        where: { userId: userId },
+                        select: { id: true }
+                    });
+
+                    if (captainProfile) {
+                        const activeRide = await prisma.ride.findFirst({
+                            where: {
+                                captainId: captainProfile.id,
+                                status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] }
+                            },
+                            select: { id: true }
+                        });
+
+                        if (activeRide) {
+                            socket.join(`ride_${activeRide.id}`);
+                            console.log(`Captain ${userId} auto-rejoined room ride_${activeRide.id}`);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error auto-rejoining ride rooms:', error);
+            }
         }
 
         socket.on("CAPTAIN_LOCATION_UPDATE", async (data: { location: { latitude: number; longitude: number }}) => {

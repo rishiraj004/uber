@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as biddingService from "../services/biddingService";
 import { getIo } from "../config/socket";
+import prisma from "../config/prisma";
 
 /**
  * Bidding Controller - Handles negotiation mode endpoints
@@ -23,6 +24,33 @@ export const createBid = async (req: Request, res: Response, next: NextFunction)
             return res.status(400).json({
                 success: false,
                 message: "Captain profile not found"
+            });
+        }
+
+        // Security: Verify captain is verified before allowing bids
+        const captainProfile = await prisma.captainProfile.findUnique({
+            where: { id: captainId },
+            select: { isVerified: true, licenseExpiry: true, rcExpiry: true }
+        });
+
+        if (!captainProfile?.isVerified) {
+            return res.status(403).json({
+                success: false,
+                message: "Your account is not verified. Please complete document verification."
+            });
+        }
+
+        const now = new Date();
+        if (captainProfile.licenseExpiry && captainProfile.licenseExpiry < now) {
+            return res.status(403).json({
+                success: false,
+                message: "Your driving license has expired. Please update your documents."
+            });
+        }
+        if (captainProfile.rcExpiry && captainProfile.rcExpiry < now) {
+            return res.status(403).json({
+                success: false,
+                message: "Your vehicle registration has expired. Please update your documents."
             });
         }
 

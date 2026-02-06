@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert, Star, Clock, Route, ChevronUp, ChevronDown, AlertTriangle } from 'lucide-react';
+import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert, Star, Clock, Route, ChevronUp, ChevronDown, AlertTriangle, Banknote, CheckCircle, Smartphone, CreditCard } from 'lucide-react';
 import api from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../../context/socket-context';
@@ -27,6 +27,8 @@ interface RideData {
   riderId?: number;
   distanceKm?: number;
   durationMinutes?: number;
+  paymentMode?: 'CASH' | 'UPI' | 'IN_APP';
+  paymentStatus?: string;
 }
 
 const CaptainTracking = () => {
@@ -42,6 +44,13 @@ const CaptainTracking = () => {
   const [completedRideData, setCompletedRideData] = useState<{ rideId: number; riderName: string; riderId: number } | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
+  
+  // Payment collection states
+  const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'IN_APP' | null>(initialRide?.paymentMode || null);
+  const [paymentStatus, setPaymentStatus] = useState<string>(initialRide?.paymentStatus || 'PENDING');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isCollectingPayment, setIsCollectingPayment] = useState(false);
+  const [isWaitingForOnlinePayment, setIsWaitingForOnlinePayment] = useState(false);
 
   // Map States
   const [path, setPath] = useState<[number, number][]>([]);
@@ -142,7 +151,100 @@ const CaptainTracking = () => {
     }
   };
 
+  // Initiate payment collection - shows payment modal to captain
+  const handleCollectPayment = async () => {
+    // Check if payment mode is set
+    if (!paymentMode) {
+      toast.error('Rider has not selected a payment method yet');
+      return;
+    }
+    
+    const rideId = initialRide?.rideId || initialRide?.id;
+    try {
+      await api.post('/ride/initiate-payment', { rideId });
+      setShowPaymentModal(true);
+      
+      // For online payments (UPI/IN_APP), set waiting state
+      if (paymentMode === 'UPI' || paymentMode === 'IN_APP') {
+        setIsWaitingForOnlinePayment(true);
+      }
+      
+      toast.success('Payment request sent to rider');
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ message: string }>;
+      toast.error(error.response?.data?.message || "Error initiating payment");
+    }
+  };
+
+  // Captain confirms they received cash/UPI payment
+  const handleConfirmCashPayment = async () => {
+    setIsCollectingPayment(true);
+    const rideId = initialRide?.rideId || initialRide?.id;
+    try {
+      await api.post('/ride/confirm-cash-payment', { rideId });
+      setPaymentStatus('CAPTURED');
+      setShowPaymentModal(false);
+      toast.success('Payment confirmed!');
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ message: string }>;
+      toast.error(error.response?.data?.message || "Error confirming payment");
+    } finally {
+      setIsCollectingPayment(false);
+    }
+  };
+
+  // Listen for payment events from rider
+  useEffect(() => {
+    if (!socket) return;
+    
+    const rideId = initialRide?.rideId || initialRide?.id;
+    
+    // Handle payment method update from rider
+    const handlePaymentMethodUpdated = (data: { rideId: number; paymentMethod: string; fare: number; message: string }) => {
+      if (data.rideId === rideId) {
+        setPaymentMode(data.paymentMethod as 'CASH' | 'UPI' | 'IN_APP');
+        toast.success(data.message || `Payment method updated to ${data.paymentMethod}`);
+      }
+    };
+    
+    // Handle both events for payment confirmation
+    const handlePaymentReceived = (data: { rideId: number; fare: number; amount?: number }) => {
+      if (data.rideId === rideId) {
+        setPaymentStatus('CAPTURED');
+        setShowPaymentModal(false);
+        setIsWaitingForOnlinePayment(false);
+        toast.success(`Payment of ₹${data.fare || data.amount} received!`);
+      }
+    };
+    
+    const handlePaymentSuccessful = (data: { rideId: number; amount: number; paymentMethod: string; message: string }) => {
+      if (data.rideId === rideId) {
+        setPaymentStatus('CAPTURED');
+        setShowPaymentModal(false);
+        setIsWaitingForOnlinePayment(false);
+        toast.success(data.message || `Payment of ₹${data.amount} received!`);
+      }
+    };
+    
+    socket.on("PAYMENT_METHOD_UPDATED", handlePaymentMethodUpdated);
+    socket.on("PAYMENT_RECEIVED", handlePaymentReceived);
+    socket.on("PAYMENT_SUCCESSFUL", handlePaymentSuccessful);
+    
+    return () => { 
+      socket.off("PAYMENT_METHOD_UPDATED", handlePaymentMethodUpdated);
+      socket.off("PAYMENT_RECEIVED", handlePaymentReceived); 
+      socket.off("PAYMENT_SUCCESSFUL", handlePaymentSuccessful);
+    };
+  }, [socket, initialRide?.rideId, initialRide?.id]);
+
   const handleCompleteTrip = async () => {
+    // Check if payment is collected first
+    if (paymentStatus !== 'CAPTURED') {
+      toast.error('Please collect payment before completing the ride');
+      setShowPaymentModal(true);
+      return;
+    }
+    
     setLoading(true);
     try {
       const rideId = initialRide?.rideId || initialRide?.id;
@@ -153,9 +255,10 @@ const CaptainTracking = () => {
         riderId: initialRide?.riderId ?? 0
       });
       setShowRatingModal(true);
-    } catch (err) {
-      console.error("Error completing trip:", err);
-      toast.error("Error completing trip");
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ message: string }>;
+      console.error("Error completing trip:", error);
+      toast.error(error.response?.data?.message || "Error completing trip");
     } finally {
       setLoading(false);
     }
@@ -213,6 +316,117 @@ const CaptainTracking = () => {
           title="Rate Your Rider"
         />
       )}
+
+      {/* Payment Collection Modal */}
+      <AnimatePresence>
+        {showPaymentModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => !isWaitingForOnlinePayment && setShowPaymentModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {!paymentMode ? (
+                // Payment mode not yet selected by rider
+                <div className="text-center py-4">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-orange-100 flex items-center justify-center mb-4">
+                    <AlertTriangle size={32} className="text-orange-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-zinc-900">Waiting for Payment Method</h3>
+                  <p className="text-zinc-500 mt-2">
+                    Rider has not selected a payment method yet. Please wait.
+                  </p>
+                  <button
+                    onClick={() => setShowPaymentModal(false)}
+                    className="w-full mt-6 py-3 bg-zinc-100 text-zinc-700 rounded-2xl font-semibold"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-6">
+                    <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
+                      paymentMode === 'CASH' ? 'bg-green-100' : paymentMode === 'UPI' ? 'bg-purple-100' : 'bg-blue-100'
+                    }`}>
+                      {paymentMode === 'CASH' && <Banknote size={32} className="text-green-600" />}
+                      {paymentMode === 'UPI' && <Smartphone size={32} className="text-purple-600" />}
+                      {paymentMode === 'IN_APP' && <CreditCard size={32} className="text-blue-600" />}
+                    </div>
+                    <h3 className="text-xl font-bold text-zinc-900">
+                      {paymentMode === 'CASH' ? 'Collect Cash' : paymentMode === 'UPI' ? 'Collect UPI Payment' : 'Waiting for Online Payment'}
+                    </h3>
+                    <p className="text-zinc-500 mt-1">
+                      {paymentMode === 'CASH' && 'Collect cash from rider and confirm below'}
+                      {paymentMode === 'UPI' && 'Ask rider to pay via UPI, then confirm below'}
+                      {paymentMode === 'IN_APP' && 'Rider will pay through the app'}
+                    </p>
+                  </div>
+
+                  <div className="bg-zinc-50 rounded-2xl p-4 mb-6">
+                    <p className="text-sm text-zinc-500 text-center">Amount to collect</p>
+                    <p className="text-4xl font-black text-center text-zinc-900">₹{initialRide?.fare}</p>
+                  </div>
+
+                  {(paymentMode === 'UPI' || paymentMode === 'IN_APP') && isWaitingForOnlinePayment ? (
+                    <div className="text-center py-4">
+                      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                      <p className="text-zinc-600 font-medium">Waiting for rider to complete payment...</p>
+                      <p className="text-xs text-zinc-400 mt-2">Payment confirmation will appear automatically</p>
+                    </div>
+                  ) : paymentMode === 'IN_APP' ? (
+                    <div className="text-center py-4">
+                      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                      <p className="text-zinc-600 font-medium">Waiting for rider to complete payment...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleConfirmCashPayment}
+                        disabled={isCollectingPayment}
+                        className={`w-full py-4 rounded-2xl font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 ${
+                          paymentMode === 'CASH' 
+                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                            : 'bg-purple-600 text-white hover:bg-purple-700'
+                        }`}
+                      >
+                        {isCollectingPayment ? (
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <CheckCircle size={20} />
+                            {paymentMode === 'CASH' ? 'Cash Received' : 'UPI Payment Received'}
+                          </>
+                        )}
+                      </button>
+                      <p className="text-xs text-zinc-400 text-center mt-3">
+                        Only confirm after you have received the payment
+                      </p>
+                    </>
+                  )}
+
+                  {!isWaitingForOnlinePayment && (
+                    <button
+                      onClick={() => setShowPaymentModal(false)}
+                      className="w-full mt-3 py-3 text-zinc-500 font-medium"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Map */}
       <div className="absolute inset-0 z-0">
@@ -395,26 +609,95 @@ const CaptainTracking = () => {
               )}
 
               {rideStatus === 'ONGOING' && (
-                <motion.button 
-                  key="complete"
+                <motion.div 
+                  key="ongoing-panel"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={handleCompleteTrip}
-                  disabled={loading}
-                  className="w-full bg-green-600 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="space-y-3"
                 >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Route size={18} className="sm:w-5 sm:h-5" />
-                      Complete Trip • Collect ₹{initialRide?.fare}
-                    </>
+                  {/* Payment Status Indicator */}
+                  <div className={`flex items-center justify-between p-3 rounded-xl ${
+                    paymentStatus === 'CAPTURED' 
+                      ? 'bg-green-50 border border-green-200' 
+                      : !paymentMode 
+                        ? 'bg-orange-50 border border-orange-200'
+                        : 'bg-amber-50 border border-amber-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {paymentStatus === 'CAPTURED' ? (
+                        <CheckCircle size={18} className="text-green-600" />
+                      ) : !paymentMode ? (
+                        <AlertTriangle size={18} className="text-orange-600" />
+                      ) : (
+                        paymentMode === 'CASH' ? <Banknote size={18} className="text-green-600" /> :
+                        paymentMode === 'UPI' ? <Smartphone size={18} className="text-purple-600" /> :
+                        <CreditCard size={18} className="text-blue-600" />
+                      )}
+                      <span className={`text-sm font-medium ${
+                        paymentStatus === 'CAPTURED' 
+                          ? 'text-green-700' 
+                          : !paymentMode 
+                            ? 'text-orange-700'
+                            : paymentMode === 'CASH' ? 'text-green-700' : paymentMode === 'UPI' ? 'text-purple-700' : 'text-blue-700'
+                      }`}>
+                        {paymentStatus === 'CAPTURED' 
+                          ? 'Payment Collected' 
+                          : !paymentMode 
+                            ? 'Waiting for rider to select payment method'
+                            : `Payment: ${paymentMode === 'IN_APP' ? 'Card' : paymentMode}`
+                        }
+                      </span>
+                    </div>
+                    <span className="font-bold text-zinc-900">₹{initialRide?.fare}</span>
+                  </div>
+
+                  {/* Collect Payment Button - Only show if payment mode set and not collected */}
+                  {paymentMode && paymentStatus !== 'CAPTURED' && (
+                    <button 
+                      onClick={handleCollectPayment}
+                      className={`w-full py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-colors flex items-center justify-center gap-2 ${
+                        paymentMode === 'CASH' 
+                          ? 'bg-green-500 hover:bg-green-600 text-white' 
+                          : paymentMode === 'UPI'
+                            ? 'bg-purple-500 hover:bg-purple-600 text-white'
+                            : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      }`}
+                    >
+                      {paymentMode === 'CASH' && <Banknote size={18} className="sm:w-5 sm:h-5" />}
+                      {paymentMode === 'UPI' && <Smartphone size={18} className="sm:w-5 sm:h-5" />}
+                      {paymentMode === 'IN_APP' && <CreditCard size={18} className="sm:w-5 sm:h-5" />}
+                      {paymentMode === 'CASH' 
+                        ? `Collect Cash • ₹${initialRide?.fare}`
+                        : paymentMode === 'UPI'
+                          ? `Collect UPI • ₹${initialRide?.fare}`
+                          : `Request Payment • ₹${initialRide?.fare}`
+                      }
+                    </button>
                   )}
-                </motion.button>
+
+                  {/* Complete Trip Button - Always show but disable if payment not collected */}
+                  <button 
+                    onClick={handleCompleteTrip}
+                    disabled={loading || paymentStatus !== 'CAPTURED'}
+                    className={`w-full py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-colors flex items-center justify-center gap-2 ${
+                      paymentStatus === 'CAPTURED'
+                        ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                        : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Route size={18} className="sm:w-5 sm:h-5" />
+                        {paymentStatus === 'CAPTURED' ? 'Complete Trip' : 'Collect Payment First'}
+                      </>
+                    )}
+                  </button>
+                </motion.div>
               )}
             </AnimatePresence>
 
