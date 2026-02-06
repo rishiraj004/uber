@@ -29,16 +29,16 @@ const PLATFORM_FEE_PERCENTAGE = 0.20;
 export const getOrCreateRazorpayCustomer = async (userId: number): Promise<string> => {
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, fullName: true, phone: true, stripeCustomerId: true }
+        select: { id: true, email: true, fullName: true, phone: true, razorpayCustomerId: true }
     });
 
     if (!user) {
         throw new Error('User not found');
     }
 
-    // stripeCustomerId field is reused for Razorpay customer ID
-    if (user.stripeCustomerId) {
-        return user.stripeCustomerId;
+    // Return existing Razorpay customer ID if exists
+    if (user.razorpayCustomerId) {
+        return user.razorpayCustomerId;
     }
 
     try {
@@ -53,7 +53,7 @@ export const getOrCreateRazorpayCustomer = async (userId: number): Promise<strin
         // Save customer ID to user
         await prisma.user.update({
             where: { id: userId },
-            data: { stripeCustomerId: customer.id }
+            data: { razorpayCustomerId: customer.id }
         });
 
         return customer.id;
@@ -62,7 +62,7 @@ export const getOrCreateRazorpayCustomer = async (userId: number): Promise<strin
         const placeholderId = `cust_${userId}_${Date.now()}`;
         await prisma.user.update({
             where: { id: userId },
-            data: { stripeCustomerId: placeholderId }
+            data: { razorpayCustomerId: placeholderId }
         });
         return placeholderId;
     }
@@ -102,8 +102,8 @@ export const createRazorpayOrder = async (
         await prisma.payment.update({
             where: { id: existingPayment.id },
             data: {
-                stripePaymentIntentId: order.id,
-                stripeCustomerId: customerId,
+                razorpayPaymentId: order.id,
+                razorpayCustomerId: customerId,
                 amount,
                 status: 'PENDING'
             }
@@ -112,8 +112,8 @@ export const createRazorpayOrder = async (
         await prisma.payment.create({
             data: {
                 rideId,
-                stripePaymentIntentId: order.id,
-                stripeCustomerId: customerId,
+                razorpayPaymentId: order.id,
+                razorpayCustomerId: customerId,
                 amount,
                 currency: 'inr',
                 status: 'PENDING'
@@ -157,7 +157,7 @@ export const authorizePayment = async (rideId: number, amount: number, customerI
     });
 
     if (payment && (payment.status === 'AUTHORIZED' || payment.status === 'PENDING')) {
-        return payment.stripePaymentIntentId;
+        return payment.razorpayPaymentId;
     }
 
     // Create Razorpay order for this ride
@@ -179,7 +179,7 @@ export const authorizePayment = async (rideId: number, amount: number, customerI
         await prisma.payment.update({
             where: { id: payment.id },
             data: {
-                stripePaymentIntentId: order.id,
+                razorpayPaymentId: order.id,
                 status: 'PENDING',
                 authorizedAt: new Date()
             }
@@ -189,8 +189,8 @@ export const authorizePayment = async (rideId: number, amount: number, customerI
         await prisma.payment.create({
             data: {
                 rideId,
-                stripePaymentIntentId: order.id,
-                stripeCustomerId: customerId,
+                razorpayPaymentId: order.id,
+                razorpayCustomerId: customerId,
                 amount,
                 currency: 'inr',
                 status: 'PENDING',
@@ -243,7 +243,7 @@ export const confirmPayment = async (
     await prisma.payment.update({
         where: { rideId },
         data: {
-            stripePaymentIntentId: razorpayPaymentId, // Store the actual payment ID
+            razorpayPaymentId: razorpayPaymentId, // Store the actual payment ID
             status: 'CAPTURED',
             authorizedAt: new Date(),
             capturedAt: new Date()
@@ -296,7 +296,7 @@ export const capturePayment = async (rideId: number): Promise<void> => {
 
     try {
         // For Razorpay, verify the payment status
-        const razorpayPayment = await razorpay.payments.fetch(payment.stripePaymentIntentId);
+        const razorpayPayment = await razorpay.payments.fetch(payment.razorpayPaymentId);
         
         if (razorpayPayment.status === 'captured') {
             // Payment already captured (auto-capture enabled)
@@ -310,7 +310,7 @@ export const capturePayment = async (rideId: number): Promise<void> => {
         } else if (razorpayPayment.status === 'authorized') {
             // Need to capture manually
             await razorpay.payments.capture(
-                payment.stripePaymentIntentId, 
+                payment.razorpayPaymentId, 
                 Math.round(payment.amount * 100), 
                 'INR'
             );
@@ -379,7 +379,7 @@ export const cancelPayment = async (rideId: number): Promise<void> => {
     try {
         if (payment.status === 'CAPTURED') {
             // Create refund for captured payment
-            await razorpay.payments.refund(payment.stripePaymentIntentId, {
+            await razorpay.payments.refund(payment.razorpayPaymentId, {
                 amount: Math.round(payment.amount * 100), // Full refund in paise
                 notes: {
                     rideId: rideId.toString(),
@@ -452,7 +452,7 @@ export const refundPayment = async (rideId: number, amount?: number): Promise<vo
 
     const refundAmount = amount || payment.amount;
 
-    await razorpay.payments.refund(payment.stripePaymentIntentId, {
+    await razorpay.payments.refund(payment.razorpayPaymentId, {
         amount: Math.round(refundAmount * 100),
         notes: {
             rideId: rideId.toString(),
@@ -500,8 +500,8 @@ export const createCaptainConnectAccount = async (captainUserId: number): Promis
         throw new Error('Captain not found');
     }
 
-    if (user.captainProfile.stripeAccountId) {
-        return user.captainProfile.stripeAccountId;
+    if (user.captainProfile.razorpayAccountId) {
+        return user.captainProfile.razorpayAccountId;
     }
 
     // Create a placeholder account ID
@@ -511,8 +511,8 @@ export const createCaptainConnectAccount = async (captainUserId: number): Promis
     await prisma.captainProfile.update({
         where: { userId: captainUserId },
         data: { 
-            stripeAccountId: accountId,
-            stripeAccountVerified: true // Auto-verify for development
+            razorpayAccountId: accountId,
+            razorpayAccountVerified: true // Auto-verify for development
         }
     });
 
@@ -526,7 +526,7 @@ export const createCaptainConnectAccount = async (captainUserId: number): Promis
 export const getCaptainOnboardingLink = async (captainUserId: number): Promise<string> => {
     const captainProfile = await prisma.captainProfile.findUnique({
         where: { userId: captainUserId },
-        select: { stripeAccountId: true }
+        select: { razorpayAccountId: true }
     });
 
     // Return a link to the wallet/bank details page
@@ -539,16 +539,16 @@ export const getCaptainOnboardingLink = async (captainUserId: number): Promise<s
 export const checkCaptainAccountStatus = async (captainUserId: number): Promise<{ verified: boolean; detailsSubmitted: boolean }> => {
     const captainProfile = await prisma.captainProfile.findUnique({
         where: { userId: captainUserId },
-        select: { stripeAccountId: true, stripeAccountVerified: true }
+        select: { razorpayAccountId: true, razorpayAccountVerified: true }
     });
 
-    if (!captainProfile?.stripeAccountId) {
+    if (!captainProfile?.razorpayAccountId) {
         return { verified: false, detailsSubmitted: false };
     }
 
     return {
-        verified: captainProfile.stripeAccountVerified || false,
-        detailsSubmitted: !!captainProfile.stripeAccountId
+        verified: captainProfile.razorpayAccountVerified || false,
+        detailsSubmitted: !!captainProfile.razorpayAccountId
     };
 };
 
@@ -559,7 +559,7 @@ export const checkCaptainAccountStatus = async (captainUserId: number): Promise<
 export const requestWithdrawal = async (captainUserId: number, amount: number): Promise<{ withdrawalId: number }> => {
     const captainProfile = await prisma.captainProfile.findUnique({
         where: { userId: captainUserId },
-        select: { id: true, walletBalance: true, stripeAccountId: true, stripeAccountVerified: true }
+        select: { id: true, walletBalance: true, razorpayAccountId: true, razorpayAccountVerified: true }
     });
 
     if (!captainProfile) {
@@ -605,7 +605,7 @@ export const requestWithdrawal = async (captainUserId: number, amount: number): 
         await prisma.withdrawal.update({
             where: { id: withdrawal.id },
             data: {
-                stripeTransferId: transferId,
+                razorpayTransferId: transferId,
                 status: 'COMPLETED',
                 processedAt: new Date()
             }
@@ -663,8 +663,8 @@ export const getWalletSummary = async (captainUserId: number) => {
         select: {
             walletBalance: true,
             totalEarnings: true,
-            stripeAccountId: true,
-            stripeAccountVerified: true
+            razorpayAccountId: true,
+            razorpayAccountVerified: true
         }
     });
 
@@ -695,11 +695,11 @@ export const getWalletSummary = async (captainUserId: number) => {
         totalEarnings: captainProfile.totalEarnings,
         pendingWithdrawals: pendingWithdrawals._sum.amount || 0,
         totalWithdrawn: totalWithdrawn._sum.amount || 0,
-        payoutEnabled: !!captainProfile.stripeAccountId,
-        payoutVerified: captainProfile.stripeAccountVerified,
+        payoutEnabled: !!captainProfile.razorpayAccountId,
+        payoutVerified: captainProfile.razorpayAccountVerified,
         // Keep these for backward compatibility
-        stripeConnected: !!captainProfile.stripeAccountId,
-        stripeVerified: captainProfile.stripeAccountVerified
+        razorpayConnected: !!captainProfile.razorpayAccountId,
+        razorpayVerified: captainProfile.razorpayAccountVerified
     };
 };
 
@@ -742,7 +742,7 @@ export const getCheckoutOptions = async (rideId: number, userId: number) => {
         currency: 'INR',
         name: 'Uber Clone',
         description: `Ride: ${payment.ride.pickupAddress?.substring(0, 30)} → ${payment.ride.dropoffAddress?.substring(0, 30)}`,
-        order_id: payment.stripePaymentIntentId,
+        order_id: payment.razorpayPaymentId,
         prefill: {
             name: user.fullName,
             email: user.email,

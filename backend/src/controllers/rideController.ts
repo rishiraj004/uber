@@ -614,9 +614,8 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
         // Authorize payment (create Razorpay order)
         let paymentOrderId: string | null = null;
         try {
-            if (ride.rider.stripeCustomerId && ride.fare) {
-                // stripeCustomerId field is reused for Razorpay customer ID
-                paymentOrderId = await authorizePayment(ride.id, ride.fare, ride.rider.stripeCustomerId);
+            if (ride.rider.razorpayCustomerId && ride.fare) {
+                paymentOrderId = await authorizePayment(ride.id, ride.fare, ride.rider.razorpayCustomerId);
             }
         } catch (paymentError: any) {
             console.error("Payment authorization failed:", paymentError);
@@ -1401,7 +1400,7 @@ export const confirmCashPayment = async (req: AuthRequest, res: Response) => {
 
 /**
  * Rider confirms in-app payment (after Razorpay success)
- * This is called after the Razorpay payment verification
+ * This verifies the Razorpay signature and marks payment as captured
  */
 export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
     try {
@@ -1414,6 +1413,11 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
 
         if (!rideId) {
             return res.status(400).json({ message: "Ride ID is required" });
+        }
+
+        // Validate Razorpay payment fields
+        if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+            return res.status(400).json({ message: "Missing Razorpay payment details" });
         }
 
         const ride = await prisma.ride.findUnique({ 
@@ -1429,16 +1433,25 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ message: "You are not the rider for this trip" });
         }
 
-        if (ride.paymentMode !== "IN_APP") {
-            return res.status(400).json({ message: "This ride is not set for in-app payment" });
+        if (ride.paymentMode !== "IN_APP" && ride.paymentMode !== "UPI") {
+            return res.status(400).json({ message: "This ride is not set for in-app/UPI payment" });
         }
 
         if (ride.paymentStatus === "CAPTURED") {
             return res.status(400).json({ message: "Payment has already been confirmed" });
         }
 
-        // For IN_APP, we should verify with Razorpay (simplified here - actual verification in paymentController)
-        // In production, verify the signature before marking as captured
+        // Verify Razorpay signature
+        const crypto = require('crypto');
+        const body = razorpay_order_id + '|' + razorpay_payment_id;
+        const expectedSignature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
+            .update(body)
+            .digest('hex');
+        
+        if (expectedSignature !== razorpay_signature) {
+            return res.status(400).json({ message: "Invalid payment signature" });
+        }
 
         // Update payment status
         const updatedRide = await prisma.ride.update({
@@ -1449,13 +1462,24 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             }
         });
 
+        // Also update payment record if exists
+        await prisma.payment.updateMany({
+            where: { rideId: Number(rideId) },
+            data: {
+                status: "CAPTURED",
+                capturedAt: new Date()
+            }
+        });
+
         // Notify captain that payment is complete
         if (ride.captain?.userId) {
-            sendNotification(ride.captain.userId, "PAYMENT_RECEIVED", {
+            sendNotification(ride.captain.userId, "PAYMENT_SUCCESSFUL", {
                 rideId: ride.id,
+                amount: ride.fare,
                 fare: ride.fare,
                 paymentMode: ride.paymentMode,
-                message: `Rider has paid ₹${ride.fare} via app`
+                paymentMethod: 'RAZORPAY',
+                message: `Payment of ₹${ride.fare} received successfully`
             });
         }
 

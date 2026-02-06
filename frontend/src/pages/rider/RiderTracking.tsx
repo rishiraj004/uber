@@ -12,6 +12,13 @@ import { RideMap } from '../../components/RideMap';
 import RideChat from '../../components/RideChat';
 import EmergencyModal from '../../components/EmergencyModal';
 
+// Declare Razorpay on window for TypeScript
+declare global {
+    interface Window {
+        Razorpay: any;
+    }
+}
+
 const StatusStepper = ({ currentStatus }: { currentStatus: string }) => {
   const steps = [
     { label: 'Accepted', status: 'ACCEPTED' },
@@ -111,36 +118,35 @@ const RiderTracking = () => {
     setIsProcessingPayment(true);
     
     try {
-      // Create order on backend
-      const orderResponse = await api.post('/payment/create-order', {
-        amount: fare,
-        rideId
-      });
+      // Create order on backend - use correct endpoint
+      const orderResponse = await api.post('/payment/order', { rideId });
       
-      const { orderId, amount, currency = 'INR' } = orderResponse.data;
+      const { orderId, amount, currency, key } = orderResponse.data;
       
-      // Initialize Razorpay
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_key',
-        amount: amount * 100, // Razorpay expects paise
-        currency,
+      // Initialize Razorpay with proper configuration
+      const options: any = {
+        key: key || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: amount, // Amount already in paise from backend
+        currency: currency || 'INR',
         name: 'Uber Clone',
         description: `Ride Payment #${rideId}`,
         order_id: orderId,
         handler: async function (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) {
           try {
-            // Confirm payment on backend
-            await api.post('/ride/confirm-in-app-payment', {
+            // Verify payment on backend with correct field names
+            await api.post('/payment/verify', {
               rideId,
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id,
-              signature: response.razorpay_signature
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature
             });
             
             setShowPaymentModal(false);
             setPaymentRequested(false);
+            setIsProcessingPayment(false);
           } catch (error) {
             console.error('Payment confirmation failed:', error);
+            setIsProcessingPayment(false);
             alert('Payment confirmation failed. Please contact support.');
           }
         },
@@ -157,14 +163,34 @@ const RiderTracking = () => {
           }
         }
       };
+
+      // Configure for UPI intent if payment mode is UPI
+      if (paymentMode === 'UPI') {
+        options.config = {
+          display: {
+            blocks: {
+              upi: {
+                name: "Pay via UPI",
+                instruments: [{ method: "upi" }]
+              }
+            },
+            sequence: ["block.upi"],
+            preferences: { show_default_blocks: false }
+          }
+        };
+      }
       
       // Open Razorpay checkout
-      const razorpay = new (window as unknown as { Razorpay: new (options: typeof options) => { open: () => void } }).Razorpay(options);
-      razorpay.open();
-    } catch (error) {
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        console.error("Payment failed:", response.error);
+        setIsProcessingPayment(false);
+        alert(`Payment failed: ${response.error.description}`);
+      });
+      rzp.open();
+    } catch (error: any) {
       console.error('Failed to create payment order:', error);
-      alert('Failed to initiate payment. Please try again.');
-    } finally {
+      alert(error.response?.data?.message || 'Failed to initiate payment. Please try again.');
       setIsProcessingPayment(false);
     }
   };
@@ -578,7 +604,7 @@ const RiderTracking = () => {
                 <h3 className="text-xl font-bold text-gray-900">Payment Required</h3>
                 <p className="text-gray-500 text-sm mt-1">
                   {paymentMode === 'CASH' && 'Please pay cash to the driver'}
-                  {paymentMode === 'UPI' && 'Please pay via UPI to the driver'}
+                  {paymentMode === 'UPI' && 'Complete payment via UPI'}
                   {paymentMode === 'IN_APP' && 'Complete payment to finish your ride'}
                 </p>
               </div>
@@ -604,13 +630,33 @@ const RiderTracking = () => {
               )}
 
               {paymentMode === 'UPI' && (
-                <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 mb-6">
-                  <p className="text-sm text-purple-800 font-medium">
-                    📱 Pay <span className="font-bold">₹{rideDetails?.fare || rideData?.fare || 0}</span> via UPI to your driver
-                  </p>
-                  <p className="text-xs text-purple-600 mt-2">
-                    Scan the driver's QR code or use their UPI ID
-                  </p>
+                <div className="space-y-4">
+                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                    <p className="text-sm text-purple-800 font-medium">
+                      📱 Pay <span className="font-bold">₹{rideDetails?.fare || rideData?.fare || 0}</span> via UPI
+                    </p>
+                    <p className="text-xs text-purple-600 mt-2">
+                      Pay securely using GPay, PhonePe, Paytm or any UPI app
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={handleRazorpayPayment}
+                    disabled={isProcessingPayment}
+                    className="w-full bg-purple-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isProcessingPayment ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Smartphone size={20} />
+                        Pay ₹{rideDetails?.fare || rideData?.fare || 0} via UPI
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
 
@@ -645,13 +691,23 @@ const RiderTracking = () => {
                 </div>
               )}
 
-              {/* Close button for CASH/UPI */}
-              {(paymentMode === 'CASH' || paymentMode === 'UPI') && (
+              {/* Close button for CASH only */}
+              {paymentMode === 'CASH' && (
                 <button
                   onClick={() => setShowPaymentModal(false)}
                   className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
                 >
                   Got it
+                </button>
+              )}
+
+              {/* Cancel button for UPI/IN_APP */}
+              {(paymentMode === 'UPI' || paymentMode === 'IN_APP') && !isProcessingPayment && (
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="w-full mt-3 py-3 text-gray-500 font-medium hover:text-gray-700 transition-colors"
+                >
+                  Cancel
                 </button>
               )}
             </motion.div>

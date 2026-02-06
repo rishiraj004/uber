@@ -213,8 +213,8 @@ model User {
   phone    String  @unique
   role     Role    @default(RIDER)
 
-  // Stripe customer ID for payment processing
-  stripeCustomerId String?
+  // Razorpay customer ID for payment processing
+  razorpayCustomerId String?
 
   // Firebase Cloud Messaging token for push notifications
   fcmToken String?
@@ -310,9 +310,9 @@ model CaptainProfile {
   totalRides    Int   @default(0)
   totalEarnings Float @default(0.0)
 
-  // Stripe connected account for payouts
-  stripeAccountId       String?
-  stripeAccountVerified Boolean @default(false)
+  // Razorpay connected account for payouts
+  razorpayAccountId       String?
+  razorpayAccountVerified Boolean @default(false)
 
   // Wallet balance (pending withdrawals)
   walletBalance Float @default(0.0)
@@ -379,9 +379,9 @@ model Payment {
   ride   Ride @relation("RidePayment", fields: [rideId], references: [id])
   rideId Int  @unique
 
-  // Stripe payment intent details
-  stripePaymentIntentId String @unique
-  stripeCustomerId      String
+  // Razorpay payment details
+  razorpayPaymentId  String @unique
+  razorpayCustomerId String
 
   amount   Float // Amount in currency units
   currency String @default("inr")
@@ -409,8 +409,8 @@ model Withdrawal {
   amount   Float
   currency String @default("inr")
 
-  // Stripe transfer details
-  stripeTransferId String? @unique
+  // Razorpay transfer details
+  razorpayTransferId String? @unique
 
   status String @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
 

@@ -362,11 +362,11 @@ const CaptainTracking = () => {
                       {paymentMode === 'IN_APP' && <CreditCard size={32} className="text-blue-600" />}
                     </div>
                     <h3 className="text-xl font-bold text-zinc-900">
-                      {paymentMode === 'CASH' ? 'Collect Cash' : paymentMode === 'UPI' ? 'Collect UPI Payment' : 'Waiting for Online Payment'}
+                      {paymentMode === 'CASH' ? 'Collect Cash' : 'Waiting for Online Payment'}
                     </h3>
                     <p className="text-zinc-500 mt-1">
                       {paymentMode === 'CASH' && 'Collect cash from rider and confirm below'}
-                      {paymentMode === 'UPI' && 'Ask rider to pay via UPI, then confirm below'}
+                      {paymentMode === 'UPI' && 'Rider will pay via UPI through the app'}
                       {paymentMode === 'IN_APP' && 'Rider will pay through the app'}
                     </p>
                   </div>
@@ -376,34 +376,25 @@ const CaptainTracking = () => {
                     <p className="text-4xl font-black text-center text-zinc-900">₹{initialRide?.fare}</p>
                   </div>
 
-                  {(paymentMode === 'UPI' || paymentMode === 'IN_APP') && isWaitingForOnlinePayment ? (
+                  {(paymentMode === 'UPI' || paymentMode === 'IN_APP') ? (
                     <div className="text-center py-4">
-                      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                      <div className={`w-10 h-10 border-4 ${paymentMode === 'UPI' ? 'border-purple-600' : 'border-blue-600'} border-t-transparent rounded-full animate-spin mx-auto mb-4`} />
                       <p className="text-zinc-600 font-medium">Waiting for rider to complete payment...</p>
                       <p className="text-xs text-zinc-400 mt-2">Payment confirmation will appear automatically</p>
-                    </div>
-                  ) : paymentMode === 'IN_APP' ? (
-                    <div className="text-center py-4">
-                      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                      <p className="text-zinc-600 font-medium">Waiting for rider to complete payment...</p>
                     </div>
                   ) : (
                     <>
                       <button
                         onClick={handleConfirmCashPayment}
                         disabled={isCollectingPayment}
-                        className={`w-full py-4 rounded-2xl font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 ${
-                          paymentMode === 'CASH' 
-                            ? 'bg-green-600 text-white hover:bg-green-700' 
-                            : 'bg-purple-600 text-white hover:bg-purple-700'
-                        }`}
+                        className="w-full py-4 rounded-2xl font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 bg-green-600 text-white hover:bg-green-700"
                       >
                         {isCollectingPayment ? (
                           <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <>
                             <CheckCircle size={20} />
-                            {paymentMode === 'CASH' ? 'Cash Received' : 'UPI Payment Received'}
+                            Cash Received
                           </>
                         )}
                       </button>
@@ -413,7 +404,7 @@ const CaptainTracking = () => {
                     </>
                   )}
 
-                  {!isWaitingForOnlinePayment && (
+                  {paymentMode === 'CASH' && !isCollectingPayment && (
                     <button
                       onClick={() => setShowPaymentModal(false)}
                       className="w-full mt-3 py-3 text-zinc-500 font-medium"
