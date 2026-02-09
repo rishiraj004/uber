@@ -2,6 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { SocketContext } from './socket-context';
 
+// Use Vite env var first, fallback to older VITE_API_URL for compatibility,
+// and lastly default to localhost for local development.
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
 
@@ -13,7 +17,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     try {
-      const newSocket = io("http://localhost:3000", {
+      const newSocket = io(BACKEND_URL, {
         auth: { token }
       });
 
@@ -29,9 +33,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       newSocket.on("disconnect", () => {
         console.log("Socket disconnected");
       });
-
-      // Set socket immediately for faster availability
-      setSocket(newSocket);
 
       return () => {
         console.log("Disconnecting socket");
