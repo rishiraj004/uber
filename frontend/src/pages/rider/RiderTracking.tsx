@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
-  Phone, MessageSquare, ShieldCheck, 
+  MessageSquare, ShieldCheck, 
   XCircle, AlertTriangle, CheckCircle2, Navigation,
   Banknote, Smartphone, CreditCard
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { useSocket } from '../../context/socket-context';
 import { RideMap } from '../../components/RideMap';
 import RideChat from '../../components/RideChat';
 import EmergencyModal from '../../components/EmergencyModal';
+import InAppCall from '../../components/InAppCall';
 
 // Declare Razorpay on window for TypeScript
 declare global {
@@ -425,9 +426,11 @@ const RiderTracking = () => {
             </div>
           </div>
           <div className="flex gap-1.5 sm:gap-2">
-            <button className="p-3 sm:p-4 bg-gray-100 rounded-xl sm:rounded-2xl hover:bg-gray-200 transition-colors" title="Call driver" aria-label="Call driver">
-              <Phone size={18} className="sm:w-5 sm:h-5" />
-            </button>
+            <InAppCall
+              rideId={rideData?.rideId || rideData?.id || 0}
+              recipientName={rideDetails?.captainName || 'Captain'}
+              recipientRole="CAPTAIN"
+            />
             <button 
               onClick={() => setIsChatOpen(true)}
               className="p-3 sm:p-4 bg-gray-100 rounded-xl sm:rounded-2xl hover:bg-gray-200 transition-colors" 

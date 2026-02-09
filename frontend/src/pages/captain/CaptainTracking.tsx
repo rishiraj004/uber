@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, Phone, MessageSquare, ShieldAlert, Star, Clock, Route, ChevronUp, ChevronDown, AlertTriangle, Banknote, CheckCircle, Smartphone, CreditCard } from 'lucide-react';
+import { MapPin, Navigation, MessageSquare, ShieldAlert, Star, Clock, Route, ChevronUp, ChevronDown, AlertTriangle, Banknote, CheckCircle, Smartphone, CreditCard } from 'lucide-react';
 import api from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../../context/socket-context';
@@ -10,6 +10,7 @@ import { AxiosError } from 'axios';
 import RatingModal from '../../components/RatingModal';
 import RideChat from '../../components/RideChat';
 import EmergencyModal from '../../components/EmergencyModal';
+import InAppCall from '../../components/InAppCall';
 
 interface RideData {
   id?: number;
@@ -481,13 +482,12 @@ const CaptainTracking = () => {
                 </div>
               </div>
             </div>
-            <div className="flex gap-1.5 sm:gap-2">
-              <button 
-                title="Call rider" 
-                className="p-2.5 sm:p-3 bg-zinc-100 rounded-xl text-zinc-600 hover:bg-zinc-200 transition-colors"
-              >
-                <Phone size={18} className="sm:w-5 sm:h-5" />
-              </button>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <InAppCall
+                rideId={initialRide?.rideId || initialRide?.id || 0}
+                recipientName={initialRide?.riderName || 'Rider'}
+                recipientRole="RIDER"
+              />
               <button 
                 onClick={() => setIsChatOpen(true)}
                 title="Message rider" 

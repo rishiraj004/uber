@@ -51,6 +51,20 @@ export const createBid = async (
         throw new Error('Ride is no longer accepting bids');
     }
 
+    // Verify captain is approved before allowing bids
+    const captainProfile = await prisma.captainProfile.findUnique({
+        where: { id: captainId },
+        select: { isVerified: true }
+    });
+
+    if (!captainProfile) {
+        throw new Error('Captain profile not found');
+    }
+
+    if (!captainProfile.isVerified) {
+        throw new Error('Your account must be verified before you can place bids');
+    }
+
     // Check if captain already placed a bid
     const existingBid = await prisma.rideBid.findUnique({
         where: {
