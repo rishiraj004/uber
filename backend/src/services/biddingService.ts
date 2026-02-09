@@ -309,7 +309,9 @@ export const selectBid = async (rideId: number, bidId: number, riderId: number):
             throw new Error('Invalid bid');
         }
 
-        if (selectedBid.status !== 'PENDING') {
+        // Allow selecting bids that are ACCEPTED or COUNTERED.
+        // Only reject bids that are already REJECTED or already SELECTED.
+        if (selectedBid.status === 'REJECTED' || selectedBid.status === 'SELECTED') {
             throw new Error('This bid is no longer available');
         }
 
@@ -405,12 +407,12 @@ export const selectBid = async (rideId: number, bidId: number, riderId: number):
         });
     }
 
-    // Cleanup Redis
-    await redis.del(`ride_bids:${rideId}`);
+    // Cleanup Redis: collect captain IDs first, delete individual bid keys, then remove the set
     const captainIds = await redis.smembers(`ride_bids:${rideId}`);
     for (const captainId of captainIds) {
         await redis.del(`bid:${rideId}:${captainId}`);
     }
+    await redis.del(`ride_bids:${rideId}`);
 
     return {
         ride: result.updatedRide,
@@ -490,10 +492,11 @@ export const cleanupStaleBids = async (): Promise<{
     // Clean up Redis entries
     const rideIds = [...new Set(staleBids.map(b => b.rideId))];
     for (const rideId of rideIds) {
-        await redis.del(`ride_bids:${rideId}`);
-        for (const bid of staleBids.filter(b => b.rideId === rideId)) {
+        const bidsForRide = staleBids.filter(b => b.rideId === rideId);
+        for (const bid of bidsForRide) {
             await redis.del(`bid:${rideId}:${bid.captainId}`);
         }
+        await redis.del(`ride_bids:${rideId}`);
     }
 
     return {

@@ -155,6 +155,51 @@ export const getDistanceAndDuration = async ( origin: [number, number] , destina
     }
 };
 
+/**
+ * Get route for multiple waypoints (ordered) using Mapbox Directions API.
+ * Caches results in Redis for short TTL to avoid rate limits.
+ */
+export const getRouteForWaypoints = async (waypoints: [number, number][]) => {
+    try {
+        if (!waypoints || waypoints.length < 2) return null;
+
+        // Build cache key
+        const key = `route:${waypoints.map(p => `${p[0]},${p[1]}`).join('|')}`;
+        const cached = await redis.get(key);
+        if (cached) {
+            return JSON.parse(cached);
+        }
+
+        const coordStrings = waypoints.map(p => `${p[1]},${p[0]}`); // lng,lat
+        const path = coordStrings.join(';');
+
+        const response = await axios.get(`https://api.mapbox.com/directions/v5/mapbox/driving/${path}`, {
+            params: {
+                access_token: MAPBOX_API_KEY,
+                geometries: 'geojson',
+                overview: 'full'
+            }
+        });
+
+        const data = response.data;
+        if (!data.routes || data.routes.length === 0) return null;
+        const route = data.routes[0];
+        const result = {
+            distanceKm: route.distance / 1000,
+            durationMinutes: route.duration / 60,
+            geometry: route.geometry
+        };
+
+        // Cache short-lived
+        await redis.setex(key, 60, JSON.stringify(result));
+
+        return result;
+    } catch (error) {
+        console.error('Error fetching route for waypoints:', error);
+        return null;
+    }
+};
+
 export const findNearbyCaptains = async ( riderLat: number , riderLng : number , radiusKm : number = 5) => {
     try {
         const nearbyCaptainIDs = await redis.georadius(

@@ -1,15 +1,23 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.connectDB = exports.prisma = void 0;
-const client_1 = require("@prisma/client");
-exports.prisma = new client_1.PrismaClient();
-const connectDB = async () => {
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
+import dotenv from "dotenv";
+dotenv.config();
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Required for Neon connections
+    }
+});
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+export const connectDB = async () => {
     try {
-        await exports.prisma.$connect();
+        await prisma.$connect();
         console.log("Database connected successfully");
     }
     catch (error) {
         console.error("Database connection failed:", error);
     }
 };
-exports.connectDB = connectDB;
+export default prisma;

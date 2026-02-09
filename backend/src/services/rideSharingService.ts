@@ -1,7 +1,7 @@
 import prisma from '../config/prisma';
 import redis from '../config/redis';
-import { sendNotification } from '../config/socket';
-import { getDistanceAndDuration } from './mapService';
+import { sendNotification, getIo } from '../config/socket';
+import { getDistanceAndDuration, getRouteForWaypoints } from './mapService';
 
 /**
  * Ride Sharing Service - Handles Pool/Shared ride matching
@@ -30,6 +30,8 @@ interface SharedRideMatch {
     };
     detourKm: number;
     detourMinutes: number;
+    routeGeometry?: any;
+    confidence?: number; // 0..1
     discountedFare: number;
     estimatedArrival: number;
 }
@@ -145,6 +147,8 @@ export const findSharedRideMatch = async (
                 },
                 detourKm: detourResult.extraKm,
                 detourMinutes: detourResult.extraMinutes,
+                routeGeometry: detourResult.geometry,
+                confidence: detourResult.confidence,
                 discountedFare: parseFloat(discountedFare.toFixed(2)),
                 estimatedArrival: detourResult.pickupEta
             };
@@ -169,34 +173,42 @@ export const joinSharedRide = async (
     fare: number,
     vehicleType: 'CAR' | 'AUTO'
 ): Promise<any> => {
-    // Get parent ride
-    const parentRide = await prisma.ride.findUnique({
-        where: { id: parentRideId },
-        include: {
-            captain: {
-                select: {
-                    id: true,
-                    userId: true,
-                    user: { select: { fullName: true } }
-                }
-            },
-            rider: { select: { id: true, fullName: true } }
-        }
-    });
-
-    if (!parentRide || parentRide.availableSeats <= 0) {
-        throw new Error('Shared ride is no longer available');
-    }
-
-    // Create linked child ride
+    // Perform atomic seat decrement and child ride creation inside a transaction
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-    const [childRide, _] = await prisma.$transaction([
-        // Create new ride linked to parent
-        prisma.ride.create({
+    const txResult = await prisma.$transaction(async (tx) => {
+        // Attempt to decrement available seats only if seats are > 0
+        const updateResult = await tx.ride.updateMany({
+            where: { id: parentRideId, availableSeats: { gt: 0 } },
+            data: { availableSeats: { decrement: 1 } }
+        });
+
+        if (updateResult.count === 0) {
+            throw new Error('Shared ride is no longer available');
+        }
+
+        // Re-fetch parent to get captain/rider info
+        const parent = await tx.ride.findUnique({
+            where: { id: parentRideId },
+            select: {
+                id: true,
+                captainId: true,
+                availableSeats: true,
+                fare: true,
+                captain: { select: { id: true, userId: true, user: { select: { fullName: true } } } },
+                rider: { select: { id: true, fullName: true } }
+            }
+        });
+
+        if (!parent) {
+            throw new Error('Parent ride not found');
+        }
+
+        // Create the child ride linked to parent (use parent's captainId)
+        const childRide = await tx.ride.create({
             data: {
                 riderId,
-                captainId: parentRide.captainId,
+                captainId: parent.captainId,
                 pickupAddress,
                 pickupLat,
                 pickupLng,
@@ -205,7 +217,7 @@ export const joinSharedRide = async (
                 dropoffLng,
                 vehicleType,
                 rideType: 'SHARED',
-                parentRideId: parentRide.id,
+                parentRideId: parentRideId,
                 status: 'ACCEPTED',
                 fare,
                 sharingDiscount: SHARING_DISCOUNT * 100, // Store as percentage
@@ -225,27 +237,72 @@ export const joinSharedRide = async (
                     }
                 }
             }
-        }),
-        // Decrement available seats on parent ride
-        prisma.ride.update({
+        });
+
+        // Re-fetch parent ride to get fare, captain and rider info for notifications
+        const parentAfter = await tx.ride.findUnique({
+            where: { id: parentRideId },
+            select: {
+                id: true,
+                captainId: true,
+                availableSeats: true,
+                fare: true,
+                captain: { select: { id: true, userId: true, user: { select: { fullName: true } } } },
+                rider: { select: { id: true, fullName: true } }
+            }
+        });
+
+        const originalFare = parentAfter?.fare || 0;
+        const discountedOriginalFare = originalFare * (1 - SHARING_DISCOUNT / 2); // 20% discount for original rider
+
+        await tx.ride.update({
             where: { id: parentRideId },
             data: {
-                availableSeats: { decrement: 1 }
+                fare: parseFloat(discountedOriginalFare.toFixed(2)),
+                sharingDiscount: (SHARING_DISCOUNT / 2) * 100
             }
-        })
-    ]);
+        });
 
-    // Apply discount to original rider too
-    const originalFare = parentRide.fare || 0;
-    const discountedOriginalFare = originalFare * (1 - SHARING_DISCOUNT / 2); // 20% discount for original rider
-
-    await prisma.ride.update({
-        where: { id: parentRideId },
-        data: {
-            fare: parseFloat(discountedOriginalFare.toFixed(2)),
-            sharingDiscount: (SHARING_DISCOUNT / 2) * 100
-        }
+        return { childRide, parentAfter, originalFare, discountedOriginalFare };
     });
+
+    const childRide = txResult.childRide;
+    const parentRide = txResult.parentAfter;
+    const originalFare = txResult.originalFare;
+    const discountedOriginalFare = txResult.discountedOriginalFare;
+
+    if (!parentRide) {
+        throw new Error('Parent ride data missing after transaction');
+    }
+
+    // Real-time socket emits + notifications
+    try {
+        const io = getIo();
+
+        // Emit update to parent ride room so UIs can refresh passenger list/fare
+        io.to(`ride_${parentRideId}`).emit('SHARED_RIDE_UPDATED', {
+            parentRideId,
+            availableSeats: parentRide.availableSeats,
+            newPassenger: {
+                rideId: childRide.id,
+                pickup: { address: pickupAddress, lat: pickupLat, lng: pickupLng },
+                dropoff: { address: dropoffAddress, lat: dropoffLat, lng: dropoffLng }
+            },
+            newFareForOriginal: parseFloat(discountedOriginalFare.toFixed(2))
+        });
+
+        // Emit specific event to the child ride room (new passenger joined)
+        io.to(`ride_${childRide.id}`).emit('JOINED_SHARED_RIDE', {
+            rideId: childRide.id,
+            parentRideId,
+            otp,
+            pickup: { address: pickupAddress, lat: pickupLat, lng: pickupLng },
+            dropoff: { address: dropoffAddress, lat: dropoffLat, lng: dropoffLng },
+            fare
+        });
+    } catch (err) {
+        console.error('Socket emit error for shared ride join:', err);
+    }
 
     // Notify captain about new passenger
     if (parentRide.captain) {
@@ -262,13 +319,16 @@ export const joinSharedRide = async (
     }
 
     // Notify original rider about fare reduction
-    sendNotification(parentRide.riderId, 'SHARED_RIDE_FARE_REDUCED', {
-        rideId: parentRideId,
-        message: 'Another passenger is joining! Your fare has been reduced.',
-        originalFare,
-        newFare: parseFloat(discountedOriginalFare.toFixed(2)),
-        savings: parseFloat((originalFare - discountedOriginalFare).toFixed(2))
-    });
+    const originalRiderId = parentRide.rider?.id;
+    if (originalRiderId) {
+        sendNotification(originalRiderId, 'SHARED_RIDE_FARE_REDUCED', {
+            rideId: parentRideId,
+            message: 'Another passenger is joining! Your fare has been reduced.',
+            originalFare,
+            newFare: parseFloat(discountedOriginalFare.toFixed(2)),
+            savings: parseFloat((originalFare - discountedOriginalFare).toFixed(2))
+        });
+    }
 
     return {
         ride: childRide,
@@ -415,47 +475,69 @@ async function calculateDetour(
     newPickupLng: number,
     newDropoffLat: number,
     newDropoffLng: number
-): Promise<{ extraKm: number; extraMinutes: number; pickupEta: number } | null> {
+): Promise<{ extraKm: number; extraMinutes: number; pickupEta: number; geometry?: any; confidence?: number } | null> {
     try {
-        // Original route: current -> original dropoff
-        const originalRoute = await getDistanceAndDuration(
+        // Use route-for-waypoints to evaluate multiple insertion orders and pick best
+        const originalRoute = await getRouteForWaypoints([
             [currentLat, currentLng],
             [originalDropoffLat, originalDropoffLng]
-        );
+        ]);
 
-        // New route: current -> new pickup -> original dropoff -> new dropoff
-        // (or optimized order based on positions)
-        const toNewPickup = await getDistanceAndDuration(
+        if (!originalRoute) return null;
+
+        // Candidate sequences to evaluate
+        const seqA: [number, number][] = [
             [currentLat, currentLng],
-            [newPickupLat, newPickupLng]
-        );
-
-        const toOriginalDropoff = await getDistanceAndDuration(
             [newPickupLat, newPickupLng],
-            [originalDropoffLat, originalDropoffLng]
-        );
-
-        const toNewDropoff = await getDistanceAndDuration(
             [originalDropoffLat, originalDropoffLng],
             [newDropoffLat, newDropoffLng]
-        );
+        ];
 
-        if (!originalRoute || !toNewPickup || !toOriginalDropoff || !toNewDropoff) {
-            return null;
+        const seqB: [number, number][] = [
+            [currentLat, currentLng],
+            [newPickupLat, newPickupLng],
+            [newDropoffLat, newDropoffLng],
+            [originalDropoffLat, originalDropoffLng]
+        ];
+
+        const candidates: [number, number][][] = [seqA, seqB];
+        let best: { distanceKm: number; durationMinutes: number; geometry: any; seqIndex: number } | null = null;
+
+        for (let i = 0; i < candidates.length; i++) {
+            const route = await getRouteForWaypoints(candidates[i]);
+            if (!route) continue;
+            if (!best || route.distanceKm < best.distanceKm) {
+                best = { distanceKm: route.distanceKm, durationMinutes: route.durationMinutes, geometry: route.geometry, seqIndex: i };
+            }
         }
 
-        const newTotalKm = toNewPickup.distanceKm + toOriginalDropoff.distanceKm + toNewDropoff.distanceKm;
-        const newTotalMinutes = toNewPickup.durationMinutes + toOriginalDropoff.durationMinutes + toNewDropoff.durationMinutes;
+        if (!best) return null;
 
-        // Calculate only the extra distance/time (excluding final leg to new dropoff)
-        const extraKm = (toNewPickup.distanceKm + toOriginalDropoff.distanceKm) - originalRoute.distanceKm;
-        const extraMinutes = (toNewPickup.durationMinutes + toOriginalDropoff.durationMinutes) - originalRoute.durationMinutes;
+        const extraKm = Math.max(0, best.distanceKm - originalRoute.distanceKm);
+        const extraMinutes = Math.max(0, best.durationMinutes - originalRoute.durationMinutes);
+
+        // ETA to pickup: compute direct leg current -> newPickup
+        const toNewPickup = await getRouteForWaypoints([
+            [currentLat, currentLng],
+            [newPickupLat, newPickupLng]
+        ]);
+
+        const pickupEta = toNewPickup ? Math.round(toNewPickup.durationMinutes) : 0;
+
+        // Confidence score: normalized by thresholds, clamped 0..1 (higher is better)
+        const kmFactor = extraKm / (MAX_DETOUR_KM || 1);
+        const minFactor = extraMinutes / (MAX_DETOUR_MINUTES || 1);
+        let confidence = 1 - (kmFactor + minFactor);
+        if (confidence < 0) confidence = 0;
+        if (confidence > 1) confidence = 1;
 
         return {
-            extraKm: Math.max(0, extraKm),
-            extraMinutes: Math.max(0, extraMinutes),
-            pickupEta: Math.round(toNewPickup.durationMinutes)
-        };
+            extraKm: parseFloat(extraKm.toFixed(3)),
+            extraMinutes: Math.round(extraMinutes),
+            pickupEta,
+            geometry: best.geometry,
+            confidence
+        } as any;
     } catch (error) {
         console.error('Error calculating detour:', error);
         return null;
