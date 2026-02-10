@@ -77,7 +77,6 @@ const RiderTracking = () => {
   // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'IN_APP' | null>(rideData?.paymentMode || null);
-  const [paymentRequested, setPaymentRequested] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
   const [showPaymentSelection, setShowPaymentSelection] = useState(!rideData?.paymentMode);
@@ -143,7 +142,6 @@ const RiderTracking = () => {
             });
             
             setShowPaymentModal(false);
-            setPaymentRequested(false);
             setIsProcessingPayment(false);
           } catch (error) {
             console.error('Payment confirmation failed:', error);
@@ -332,13 +330,11 @@ const RiderTracking = () => {
       PAYMENT_REQUESTED: (data: { rideId: number; fare: number; paymentMode: string }) => {
         // Captain has requested payment collection
         setPaymentMode(data.paymentMode as 'CASH' | 'UPI' | 'IN_APP');
-        setPaymentRequested(true);
         setShowPaymentModal(true);
       },
       PAYMENT_CONFIRMED: () => {
         // Captain confirmed cash/UPI payment
         setShowPaymentModal(false);
-        setPaymentRequested(false);
       }
     }
     Object.entries(listeners).forEach(([event, handler]) => {
