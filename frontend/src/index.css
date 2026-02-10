@@ -1,1 +1,7 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* You can also import Tailwind directly if your setup requires it:
+	@import "tailwindcss";
+*/
