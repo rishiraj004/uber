@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import prisma from "../config/prisma";
-import { sendNotification } from "../config/socket";
+import prisma from "../config/prisma.js";
+import { sendNotification } from "../config/socket.js";
 import { v4 as uuidv4 } from "uuid";
 
 interface AuthenticatedRequest extends Request {

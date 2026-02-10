@@ -1,6 +1,6 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import { getAddressSuggestions, getDistanceAndDuration, retrieveSearchBoxResult } from "../services/mapService";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { getAddressSuggestions, getDistanceAndDuration, retrieveSearchBoxResult } from "../services/mapService.js";
 
 /**
  * Get address suggestions from Mapbox Search Box API

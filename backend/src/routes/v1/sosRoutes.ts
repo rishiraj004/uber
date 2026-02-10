@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
 import {
     triggerSOS,
     resolveSOS,
@@ -9,7 +9,7 @@ import {
     deactivateShareLink,
     saveEmergencyContacts,
     getEmergencyContacts
-} from "../../controllers/sosController";
+} from "../../controllers/sosController.js";
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares";
-import { authorizeAdmin } from "../../middlewares/roleMiddlewares";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authorizeAdmin } from "../../middlewares/roleMiddlewares.js";
 import {
     getAllCaptains,
     getCaptainDetails,
@@ -8,7 +8,7 @@ import {
     reviewDocument,
     setCaptainVerification,
     getDashboardStats
-} from "../../controllers/adminController";
+} from "../../controllers/adminController.js";
 
 const router = Router();
 

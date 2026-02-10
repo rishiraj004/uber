@@ -1,17 +1,17 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares";
-import { authorizeRole } from "../../middlewares/roleMiddlewares";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authorizeRole } from "../../middlewares/roleMiddlewares.js";
 import { 
     uploadDocument, 
     getMyDocuments, 
     deleteDocument, 
     getVerificationStatus 
-} from "../../controllers/documentController";
+} from "../../controllers/documentController.js";
 import {
     verifyDocument,
     syncWithGovtRecords,
     checkExpiredDocuments
-} from "../../controllers/documentVerificationController";
+} from "../../controllers/documentVerificationController.js";
 
 const router = Router();
 

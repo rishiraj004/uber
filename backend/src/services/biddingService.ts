@@ -1,6 +1,6 @@
-import prisma from '../config/prisma';
-import redis from '../config/redis';
-import { sendNotification } from '../config/socket';
+import prisma from '../config/prisma.js';
+import redis from '../config/redis.js';
+import { sendNotification } from '../config/socket.js';
 import { BidStatus } from '@prisma/client';
 
 /**
@@ -240,13 +240,13 @@ export const getRideBids = async (rideId: number): Promise<any[]> => {
                 }
             }
         },
-        orderBy: [
-            { offerAmount: 'asc' }, // Lowest price first
-            { captain: { rating: 'desc' } } // Then by rating
-        ]
+            orderBy: [
+                { offerAmount: 'asc' }, // Lowest price first
+                { captain: { rating: 'desc' } } // Then by rating
+            ]
     });
 
-    return bids.map(bid => ({
+        return bids.map((bid: any) => ({
         id: bid.id,
         captainId: bid.captainId,
         captainName: bid.captain.user.fullName,
@@ -499,14 +499,14 @@ export const cleanupStaleBids = async (): Promise<{
     // Delete stale bids
     const deleteResult = await prisma.rideBid.deleteMany({
         where: {
-            id: { in: staleBids.map(b => b.id) }
+            id: { in: staleBids.map((b: any) => b.id) }
         }
     });
 
     // Clean up Redis entries
-    const rideIds = [...new Set(staleBids.map(b => b.rideId))];
+    const rideIds = [...new Set(staleBids.map((b: any) => b.rideId))];
     for (const rideId of rideIds) {
-        const bidsForRide = staleBids.filter(b => b.rideId === rideId);
+        const bidsForRide = staleBids.filter((b: any) => b.rideId === rideId);
         for (const bid of bidsForRide) {
             await redis.del(`bid:${rideId}:${bid.captainId}`);
         }

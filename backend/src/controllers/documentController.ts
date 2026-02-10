@@ -1,6 +1,6 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import prisma from "../config/prisma";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import prisma from "../config/prisma.js";
 
 // Document types that captains can upload
 const VALID_DOCUMENT_TYPES = ['LICENSE', 'INSURANCE', 'RC', 'AADHAR', 'PAN'] as const;

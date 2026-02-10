@@ -1,7 +1,7 @@
-import razorpay from '../config/razorpay';
-import prisma from '../config/prisma';
+import razorpay from '../config/razorpay.js';
+import prisma from '../config/prisma.js';
 import crypto from 'crypto';
-import { sendNotification } from '../config/socket';
+import { sendNotification } from '../config/socket.js';
 
 /**
  * Payment Service - Handles all Razorpay payment operations

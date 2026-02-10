@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { addressSuggestions, getDirections, retrievePlaceDetails } from "../../controllers/mapController";
-import { authenticate } from "../../middlewares/authMiddelwares";
+import { addressSuggestions, getDirections, retrievePlaceDetails } from "../../controllers/mapController.js";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
 
 const router = Router();
 

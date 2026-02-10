@@ -1,6 +1,6 @@
-import prisma from '../config/prisma';
+import prisma from '../config/prisma.js';
 import axios from 'axios';
-import { sendPushNotification } from './pushNotificationService';
+import { sendPushNotification } from './pushNotificationService.js';
 
 /**
  * Document Verification Service - OCR and External API validation

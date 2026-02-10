@@ -1,7 +1,7 @@
-import { findNearbyCaptains } from "./mapService";
-import { userData } from "./getProfileService";
-import { calculateRideFare, calculateAllFareOptions, vehicleClassInfo } from "./rideService";
-import { calculateSurgeMultiplier, getSurgeInfo, getSurgeHeatmapData } from "./surgeService";
+import { findNearbyCaptains } from "./mapService.js";
+import { userData } from "./getProfileService.js";
+import { calculateRideFare, calculateAllFareOptions, vehicleClassInfo } from "./rideService.js";
+import { calculateSurgeMultiplier, getSurgeInfo, getSurgeHeatmapData } from "./surgeService.js";
 import { 
     authorizePayment, 
     capturePayment, 
@@ -13,8 +13,8 @@ import {
     createRazorpayOrder,
     confirmPayment,
     getRazorpayKey
-} from "./paymentService";
-import { sendPushNotification, updateFcmToken, removeFcmToken } from "./pushNotificationService";
+} from "./paymentService.js";
+import { sendPushNotification, updateFcmToken, removeFcmToken } from "./pushNotificationService.js";
 
 export {
     findNearbyCaptains,

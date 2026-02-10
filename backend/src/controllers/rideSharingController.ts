@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import * as rideSharingService from "../services/rideSharingService";
+import * as rideSharingService from "../services/rideSharingService.js";
 
 /**
  * Ride Sharing Controller - Pool/Shared rides

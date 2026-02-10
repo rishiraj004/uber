@@ -1,5 +1,5 @@
-import { authorizeRole } from "../../middlewares/roleMiddlewares";
-import { authenticate } from "../../middlewares/authMiddelwares";
+import { authorizeRole } from "../../middlewares/roleMiddlewares.js";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
 import { Router } from "express";
 import { 
     calculateFare, 
@@ -20,7 +20,7 @@ import {
     confirmInAppPayment,
     getPaymentStatus,
     updatePaymentMethod
-} from "../../controllers/rideController";
+} from "../../controllers/rideController.js";
 
 const router = Router();
 

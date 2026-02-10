@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import prisma from "../config/prisma";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import { userData } from "../services/getProfileService";
+import prisma from "../config/prisma.js";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { userData } from "../services/getProfileService.js";
 
 export const signup = async (req: Request, res: Response) => {
     try {

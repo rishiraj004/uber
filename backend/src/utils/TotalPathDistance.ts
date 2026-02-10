@@ -1,4 +1,4 @@
-import { distanceBetweenPoints } from './distanceBetweenPoints';
+import { distanceBetweenPoints } from './distanceBetweenPoints.js';
 
 export const calculateTotalPathDistance = (path: { lat: number; lng: number }[]): number => {
     let totalDistance = 0;

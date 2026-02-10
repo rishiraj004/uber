@@ -1,5 +1,5 @@
-import firebaseAdmin from '../config/firebase';
-import prisma from '../config/prisma';
+import firebaseAdmin from '../config/firebase.js';
+import prisma from '../config/prisma.js';
 
 type NotificationType = 
     | 'RIDE_ACCEPTED'

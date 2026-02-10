@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate, authorizeRole, attachCaptainProfile } from "../../middlewares";
-import * as biddingController from "../../controllers/biddingController";
+import { authenticate, authorizeRole, attachCaptainProfile } from "../../middlewares/index.js";
+import * as biddingController from "../../controllers/biddingController.js";
 
 const router = Router();
 

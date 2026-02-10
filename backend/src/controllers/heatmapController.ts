@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import * as heatmapService from "../services/heatmapService";
+import * as heatmapService from "../services/heatmapService.js";
 
 /**
  * Heatmap Controller - Captain demand visualization

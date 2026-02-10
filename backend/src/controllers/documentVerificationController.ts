@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import * as documentVerificationService from "../services/documentVerificationService";
+import * as documentVerificationService from "../services/documentVerificationService.js";
 
 /**
  * Document Verification Controller - OCR and govt records sync

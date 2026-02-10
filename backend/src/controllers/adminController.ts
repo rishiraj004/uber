@@ -1,6 +1,6 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import prisma from "../config/prisma";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import prisma from "../config/prisma.js";
 
 /**
  * Get all captains with their verification status (Admin only)

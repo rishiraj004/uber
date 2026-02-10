@@ -1,7 +1,7 @@
 import { Response, NextFunction } from "express";
-import { AuthRequest } from "./authMiddelwares";
+import { AuthRequest } from "./authMiddelwares.js";
 import jwt from "jsonwebtoken";
-import prisma from "../config/prisma";
+import prisma from "../config/prisma.js";
 
 
 export const authorizeRole = ( requiredRole : 'RIDER' | 'CAPTAIN' | 'ADMIN') => {

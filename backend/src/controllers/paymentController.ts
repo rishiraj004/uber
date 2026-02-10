@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
 import {
     getOrCreateRazorpayCustomer,
     createRazorpayOrder,
@@ -12,8 +12,8 @@ import {
     getWalletSummary,
     getCheckoutOptions,
     getRazorpayKey
-} from "../services/paymentService";
-import prisma from "../config/prisma";
+} from "../services/paymentService.js";
+import prisma from "../config/prisma.js";
 
 /**
  * Get Razorpay key for frontend

@@ -1,6 +1,6 @@
-import redis from '../config/redis';
-import prisma from '../config/prisma';
-import { distanceBetweenPoints } from '../utils';
+import redis from '../config/redis.js';
+import prisma from '../config/prisma.js';
+import { distanceBetweenPoints } from '../utils/index.js';
 
 /**
  * Surge Pricing Service

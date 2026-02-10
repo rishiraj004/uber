@@ -1,8 +1,8 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import prisma from "../config/prisma";
-import { findNearbyCaptains } from "../services/mapService";
-import redis from "../config/redis";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import prisma from "../config/prisma.js";
+import { findNearbyCaptains } from "../services/mapService.js";
+import redis from "../config/redis.js";
 
 export const toggleAvailability = async ( req : AuthRequest , res : Response ) => {
     try {

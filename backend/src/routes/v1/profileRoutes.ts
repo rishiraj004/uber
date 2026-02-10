@@ -1,13 +1,13 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares";
-import { authorizeRole } from "../../middlewares/roleMiddlewares";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authorizeRole } from "../../middlewares/roleMiddlewares.js";
 import {
     updateRiderAddresses,
     getRiderAddresses,
     uploadCaptainDocument,
     getCaptainDocuments,
     getFullProfile
-} from "../../controllers/profileController";
+} from "../../controllers/profileController.js";
 
 const router = Router();
 

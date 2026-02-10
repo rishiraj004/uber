@@ -1,9 +1,9 @@
 import cron from 'node-cron';
-import { checkExpiredDocuments } from './documentVerificationService';
-import { cleanupStaleBids } from './biddingService';
-import { cleanupHeatmapData } from './heatmapService';
-import prisma from '../config/prisma';
-import redisClient from '../config/redis';
+import { checkExpiredDocuments } from './documentVerificationService.js';
+import { cleanupStaleBids } from './biddingService.js';
+import { cleanupHeatmapData } from './heatmapService.js';
+import prisma from '../config/prisma.js';
+import redisClient from '../config/redis.js';
 
 /**
  * Cron Job Service

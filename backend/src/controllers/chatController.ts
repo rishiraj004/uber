@@ -1,7 +1,7 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import prisma from "../config/prisma";
-import { sendNotification } from "../config/socket";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import prisma from "../config/prisma.js";
+import { sendNotification } from "../config/socket.js";
 
 // Send a chat message during an active ride
 export const sendChatMessage = async (req: AuthRequest, res: Response) => {

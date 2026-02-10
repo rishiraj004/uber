@@ -1,15 +1,15 @@
 import { Response } from "express";
-import prisma from "../config/prisma";
-import { AuthRequest } from "../middlewares/authMiddelwares";
+import prisma from "../config/prisma.js";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
 import crypto from "crypto";
-import { findNearbyCaptains } from "../services/mapService";
-import { distanceBetweenPoints, calculateTotalPathDistance, calculateTotalTime } from "../utils";
-import { sendNotification } from "../config/socket";
-import { calculateRideFare, calculateAllFareOptions, VehicleClass } from "../services/rideService";
-import { getDistanceAndDuration } from "../services/mapService";
-import { calculateSurgeMultiplier, getSurgeInfo } from "../services/surgeService";
-import { authorizePayment, capturePayment, cancelPayment, getOrCreateRazorpayCustomer } from "../services/paymentService";
-import { sendPushNotification } from "../services/pushNotificationService";
+import { findNearbyCaptains } from "../services/mapService.js";
+import { distanceBetweenPoints, calculateTotalPathDistance, calculateTotalTime } from "../utils/index.js";
+import { sendNotification } from "../config/socket.js";
+import { calculateRideFare, calculateAllFareOptions, VehicleClass } from "../services/rideService.js";
+import { getDistanceAndDuration } from "../services/mapService.js";
+import { calculateSurgeMultiplier, getSurgeInfo } from "../services/surgeService.js";
+import { authorizePayment, capturePayment, cancelPayment, getOrCreateRazorpayCustomer } from "../services/paymentService.js";
+import { sendPushNotification } from "../services/pushNotificationService.js";
 
 export const calculateFare = async ( req: AuthRequest, res: Response) => {
     try {

@@ -1,8 +1,8 @@
 import express, { Application } from 'express';
 import cors from 'cors';
-import apiRoutes from './routes';
+import apiRoutes from './routes/index.js';
 import dotenv from 'dotenv';
-import { startCronJobs, stopCronJobs } from './services/cronJobService';
+import { startCronJobs, stopCronJobs } from './services/cronJobService.js';
 
 dotenv.config();
 

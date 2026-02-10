@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares";
-import { authorizeRole } from "../../middlewares/roleMiddlewares";
+import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authorizeRole } from "../../middlewares/roleMiddlewares.js";
 import {
     getRazorpayKeyId,
     createOrder,
@@ -17,7 +17,7 @@ import {
     getCaptainWallet,
     createWithdrawal,
     getWithdrawals
-} from "../../controllers/paymentController";
+} from "../../controllers/paymentController.js";
 
 const router = Router();
 

@@ -1,8 +1,8 @@
 import { Socket, Server as SocketServer } from "socket.io";
 import { Server as HttpServer } from "http";
-import prisma from "./prisma";
+import prisma from "./prisma.js";
 import jwt from "jsonwebtoken";
-import redis from "./redis";
+import redis from "./redis.js";
 
 let io: SocketServer;
 
@@ -582,7 +582,7 @@ export const initSocket = (httpServer: HttpServer) => {
                         select: { id: true }
                     });
                     if (captainProfile) {
-                        await redis.zrem('captain_locations', captainProfile.id.toString()).catch(err => {
+                        await redis.zrem('captain_locations', captainProfile.id.toString()).catch((err: any) => {
                             console.error(`Error removing captain ${captainProfile.id} from captain_locations:`, err);
                         });
                     }

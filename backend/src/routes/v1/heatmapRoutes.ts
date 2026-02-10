@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate, authorizeRole, attachCaptainProfile } from "../../middlewares";
-import * as heatmapController from "../../controllers/heatmapController";
+import { authenticate, authorizeRole, attachCaptainProfile } from "../../middlewares/index.js";
+import * as heatmapController from "../../controllers/heatmapController.js";
 
 const router = Router();
 

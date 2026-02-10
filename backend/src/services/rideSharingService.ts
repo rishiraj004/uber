@@ -1,7 +1,7 @@
-import prisma from '../config/prisma';
-import redis from '../config/redis';
-import { sendNotification, getIo } from '../config/socket';
-import { getDistanceAndDuration, getRouteForWaypoints } from './mapService';
+import prisma from '../config/prisma.js';
+import redis from '../config/redis.js';
+import { sendNotification, getIo } from '../config/socket.js';
+import { getDistanceAndDuration, getRouteForWaypoints } from './mapService.js';
 
 /**
  * Ride Sharing Service - Handles Pool/Shared ride matching

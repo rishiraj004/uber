@@ -1,6 +1,6 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import prisma from "../config/prisma";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import prisma from "../config/prisma.js";
 
 // Update rider's saved addresses (Home/Work)
 export const updateRiderAddresses = async (req: AuthRequest, res: Response) => {

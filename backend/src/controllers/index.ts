@@ -1,9 +1,9 @@
-import { signup, login, getProfile } from "./authController";
-import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide, getRidePath, getRideDetails, getRideHistory, getRideHistoryDetail } from "./rideController";
-import { getCaptainStatus, toggleAvailability, getNearbyCaptains, updateLocation } from "./captainController";
-import { submitReview, getReviewsForUser, checkReviewStatus } from "./reviewController";
-import { updateRiderAddresses, getRiderAddresses, uploadCaptainDocument, getCaptainDocuments, getFullProfile } from "./profileController";
-import { sendChatMessage, getChatMessages } from "./chatController";
+import { signup, login, getProfile } from "./authController.js";
+import { createRide, acceptRide, startRide, completeRide, calculateFare, cancelRide, getRidePath, getRideDetails, getRideHistory, getRideHistoryDetail } from "./rideController.js";
+import { getCaptainStatus, toggleAvailability, getNearbyCaptains, updateLocation } from "./captainController.js";
+import { submitReview, getReviewsForUser, checkReviewStatus } from "./reviewController.js";
+import { updateRiderAddresses, getRiderAddresses, uploadCaptainDocument, getCaptainDocuments, getFullProfile } from "./profileController.js";
+import { sendChatMessage, getChatMessages } from "./chatController.js";
 import { 
     getSetupIntent, 
     getUserPaymentMethods, 
@@ -14,8 +14,8 @@ import {
     getCaptainWallet,
     createWithdrawal,
     getWithdrawals 
-} from "./paymentController";
-import { registerFcmToken, unregisterFcmToken } from "./notificationController";
+} from "./paymentController.js";
+import { registerFcmToken, unregisterFcmToken } from "./notificationController.js";
 
 export {
     signup,

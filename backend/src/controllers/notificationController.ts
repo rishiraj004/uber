@@ -1,6 +1,6 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares";
-import { updateFcmToken, removeFcmToken } from "../services/pushNotificationService";
+import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { updateFcmToken, removeFcmToken } from "../services/pushNotificationService.js";
 
 /**
  * Register/Update FCM token for push notifications

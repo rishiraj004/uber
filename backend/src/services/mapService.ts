@@ -1,5 +1,5 @@
-import prisma from "../config/prisma";
-import redis from "../config/redis";
+import prisma from "../config/prisma.js";
+import redis from "../config/redis.js";
 import axios from "axios";
 
 const MAPBOX_API_KEY = process.env.MAPBOX_API_KEY;
@@ -217,7 +217,7 @@ export const findNearbyCaptains = async ( riderLat: number , riderLng : number ,
         // Only include verified, online, and available captains
         const response = await prisma.captainProfile.findMany({
             where: {
-                id: { in: nearbyCaptainIDs.map(id => Number(id)) },
+                id: { in: nearbyCaptainIDs.map((id: any) => Number(id)) },
                 isOnline: true,
                 isAvailable: true,
                 isVerified: true  // Only verified captains can receive ride requests

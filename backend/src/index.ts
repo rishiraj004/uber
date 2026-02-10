@@ -1,7 +1,7 @@
-import app from './app';
-import { connectDB } from './config/prisma';
+import app from './app.js';
+import { connectDB } from './config/prisma.js';
 import http from 'http';
-import { initSocket } from './config/socket';
+import { initSocket } from './config/socket.js';
 
 const DEFAULT_PORT = parseInt(String(process.env.PORT || '3000'), 10);
 

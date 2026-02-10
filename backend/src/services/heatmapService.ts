@@ -1,4 +1,4 @@
-import redis from '../config/redis';
+import redis from '../config/redis.js';
 import ngeohash from 'ngeohash';
 
 /**
