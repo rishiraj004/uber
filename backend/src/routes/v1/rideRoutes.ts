@@ -25,6 +25,8 @@ import {
 const router = Router();
 
 router.get("/details/:userId", authenticate, getRideDetails);
+router.get("/history", authenticate, getRideHistory);
+router.get("/history/:rideId", authenticate, getRideHistoryDetail);
 router.get("/:rideId", authenticate, getRideById);  // Get specific ride by ID (for Receipt/Review)
 router.post("/calculate-fare", authenticate, authorizeRole("RIDER"), calculateFare);
 router.post("/check-surge", authenticate, authorizeRole("RIDER"), checkSurge);
@@ -44,9 +46,5 @@ router.get("/payment-status/:rideId", authenticate, getPaymentStatus);
 router.patch("/:rideId/payment-method", authenticate, authorizeRole("RIDER"), updatePaymentMethod);
 
 router.get("/path/:rideId", authenticate, getRidePath);
-
-// Ride history endpoints
-router.get("/history", authenticate, getRideHistory);
-router.get("/history/:rideId", authenticate, getRideHistoryDetail);
 
 export default router;
