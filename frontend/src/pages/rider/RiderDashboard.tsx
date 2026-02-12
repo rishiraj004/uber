@@ -1,7 +1,7 @@
 import axios from "axios";
 import api from "../../services/api";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Car, Bike, Zap, Clock, Route, LogOut, X, ChevronRight, User, History, Home, Briefcase, Map } from 'lucide-react';
+import { Car, Bike, Zap, Clock, Route, LogOut, X, ChevronRight, User, History, Home, Briefcase, Map, Gavel, Star } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../../context/socket-context";
 import AddressAutocomplete from "../../components/AddressAutocomplete";
@@ -34,6 +34,72 @@ interface Fares {
     BIKE: number;
     AUTO: number;
 }
+
+// Types for bid socket events
+type RawBidEvent = {
+    bid?: {
+        id: number;
+        captainId: number;
+        offerAmount: number;
+        estimatedArrival?: number;
+        status?: string;
+        captainName?: string;
+        captainRating?: number;
+        totalRides?: number;
+        vehicleNumber?: string;
+        vehicleModel?: string;
+        vehicleColor?: string;
+        vehicleType?: string;
+        isAcceptingRiderPrice?: boolean;
+    };
+    isAcceptingRiderPrice?: boolean;
+    captainId?: number;
+    captainName?: string;
+    newOfferAmount?: number;
+    offerAmount?: number;
+    status?: string;
+};
+
+type RawBidUpdated = {
+    rideId?: number;
+    captainId: number;
+    captainName?: string;
+    newOfferAmount?: number;
+    offerAmount?: number;
+    status?: string;
+};
+
+type BidPayload = {
+    id: number;
+    captainId: number;
+    offerAmount?: number;
+    estimatedArrival?: number;
+    status?: string;
+    captainName?: string;
+    captainRating?: number;
+    totalRides?: number;
+    vehicleNumber?: string;
+    vehicleModel?: string;
+    vehicleColor?: string;
+    vehicleType?: string;
+    isAcceptingRiderPrice?: boolean;
+};
+
+type Bid = {
+    id: number;
+    offerAmount: number;
+    status: string;
+    estimatedArrival?: number;
+    captain: {
+        id: number;
+        rating: number;
+        totalRides: number;
+        vehicleNumber: string;
+        vehicleModel: string;
+        vehicleColor: string;
+        user: { fullName: string };
+    };
+};
 
 const VehicleOption = ({ 
     type, 
@@ -133,6 +199,30 @@ const RiderDashboard: React.FC = () => {
         workAddressLng: number | null;
     } | null>(null);
 
+    // Nearby captains for map display
+    const [nearbyCaptains, setNearbyCaptains] = useState<{id: number; lastLat: number; lastLng: number}[]>([]);
+
+    // Bidding mode
+    const [biddingEnabled, setBiddingEnabled] = useState(false);
+    const [offerPrice, setOfferPrice] = useState<number | null>(null);
+
+    // Incoming bids from captains
+    const [bids, setBids] = useState<Array<{
+        id: number;
+        offerAmount: number;
+        status: string;
+        estimatedArrival?: number;
+        captain: {
+            id: number;
+            rating: number;
+            totalRides: number;
+            vehicleNumber: string;
+            vehicleModel: string;
+            vehicleColor: string;
+            user: { fullName: string };
+        };
+    }>>([]);
+
     // Directions cache to avoid repeated API calls
     const directionsCache = useRef<DirectionsCache | null>(null);
     
@@ -157,6 +247,34 @@ const RiderDashboard: React.FC = () => {
         };
         fetchSavedAddresses();
     }, []);
+
+    // Fetch nearby captains when pickup location is set
+    // Clear nearby captains when pickup cleared (avoid setState directly in other effect body)
+    useEffect(() => {
+        if (!pickupCoords) {
+            // schedule clear to avoid synchronous setState inside effect body
+            const t = setTimeout(() => setNearbyCaptains([]), 0);
+            return () => clearTimeout(t);
+        }
+        return;
+    }, [pickupCoords]);
+
+    // Fetch nearby captains when pickup location is set
+    useEffect(() => {
+        if (!pickupCoords) return;
+        const fetchNearbyCaptains = async () => {
+            try {
+                const response = await api.get(`/captain/nearby?latitude=${pickupCoords.lat}&longitude=${pickupCoords.lng}&radius=5`);
+                setNearbyCaptains(response.data.captains || []);
+            } catch (err) {
+                console.error("Error fetching nearby captains:", err);
+            }
+        };
+        fetchNearbyCaptains();
+        // Refresh every 30 seconds
+        const interval = setInterval(fetchNearbyCaptains, 30000);
+        return () => clearInterval(interval);
+    }, [pickupCoords]);
 
     // Check for active ride on mount
     useEffect(() => {
@@ -212,10 +330,66 @@ const RiderDashboard: React.FC = () => {
         socket.on("RIDE_ACCEPTED", handleRideAccepted);
         socket.on("RIDE_EXPIRED", handleRideExpired);
         socket.on("RIDE_SEARCHING", handleRideSearching);
+
+        // Bidding listeners
+        const handleNewBid = (data: RawBidEvent) => {
+            // Backend sends flat fields or a nested `bid` object. Narrow safely.
+            const raw = (data as RawBidEvent).bid ? (data as RawBidEvent).bid as BidPayload : (data as unknown as BidPayload);
+
+            const normalizedBid: Bid = {
+                id: raw.id ?? 0,
+                offerAmount: raw.offerAmount ?? 0,
+                status: raw.status ?? 'COUNTERED',
+                estimatedArrival: raw.estimatedArrival,
+                captain: {
+                    id: raw.captainId ?? 0,
+                    user: { fullName: raw.captainName || 'Captain' },
+                    rating: raw.captainRating ?? 0,
+                    totalRides: raw.totalRides ?? 0,
+                    vehicleNumber: raw.vehicleNumber || '',
+                    vehicleModel: raw.vehicleModel || '',
+                    vehicleColor: raw.vehicleColor || ''
+                }
+            };
+
+            const isAcceptingRiderPrice = raw.isAcceptingRiderPrice || (data as RawBidEvent).isAcceptingRiderPrice;
+
+            setBids((prev: Bid[]) => {
+                const existing = prev.find(b => b.captain.id === normalizedBid.captain.id);
+                if (existing) return prev;
+                return [...prev, normalizedBid];
+            });
+
+            if (isAcceptingRiderPrice) {
+                toast.success(`${normalizedBid.captain.user.fullName} accepted your price!`);
+            } else {
+                toast(`${normalizedBid.captain.user.fullName} counter-offered ₹${normalizedBid.offerAmount}`, { icon: '💰' });
+            }
+        };
+
+        const handleBidUpdated = (data: RawBidUpdated) => {
+            // Backend sends flat: { rideId, captainId, captainName, newOfferAmount, status }
+            const captainId = data.captainId;
+            const newAmount = data.newOfferAmount ?? data.offerAmount ?? 0;
+            setBids((prev: Bid[]) => prev.map(b =>
+                b.captain.id === captainId
+                    ? { ...b, offerAmount: newAmount, status: data.status ?? b.status }
+                    : b
+            ));
+            if (data.captainName) {
+                toast(`${data.captainName} updated offer to ₹${newAmount}`, { icon: '💰' });
+            }
+        };
+
+        socket.on("NEW_BID_RECEIVED", handleNewBid);
+        socket.on("BID_UPDATED", handleBidUpdated);
+
         return () => { 
             socket.off("RIDE_ACCEPTED", handleRideAccepted);
             socket.off("RIDE_EXPIRED", handleRideExpired);
             socket.off("RIDE_SEARCHING", handleRideSearching);
+            socket.off("NEW_BID_RECEIVED", handleNewBid);
+            socket.off("BID_UPDATED", handleBidUpdated);
         };
     }, [socket, navigate, rideId]);
 
@@ -325,6 +499,11 @@ const RiderDashboard: React.FC = () => {
             return;
         }
 
+        if (biddingEnabled && (!offerPrice || offerPrice < Math.round(fares[vehicleType] * 0.5))) {
+            setError(`Offer price must be at least ₹${Math.round(fares[vehicleType] * 0.5)}`);
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -334,10 +513,16 @@ const RiderDashboard: React.FC = () => {
                 pickupCoords,
                 destCoords: dropoffCoords,
                 vehicleType,
+                ...(biddingEnabled && { isBiddingEnabled: true, baseOfferPrice: offerPrice }),
             });
 
             setRideId(response.data.ride.id);
-            toast.success('Looking for nearby captains...');
+            
+            if (biddingEnabled) {
+                toast.success('Ride posted! Waiting for captain bids...');
+            } else {
+                toast.success('Looking for nearby captains...');
+            }
         } catch (err) {
             if (axios.isAxiosError(err)) {
                 setError(err.response?.data.message || "Failed to request ride.");
@@ -355,9 +540,22 @@ const RiderDashboard: React.FC = () => {
             await api.post("/ride/cancel-ride", { rideId });
             setLoading(false);
             setRideId(null);
+            setBids([]);
             toast('Ride cancelled');
         } catch (err) {
             console.error("Error cancelling ride:", err);
+        }
+    };
+
+    const handleSelectBid = async (bidId: number) => {
+        if (!rideId) return;
+        try {
+            await api.post(`/bids/${rideId}/select/${bidId}`);
+            toast.success('Captain selected! They are on the way.');
+            // The RIDE_ACCEPTED socket event will navigate to tracking
+        } catch (err) {
+            console.error("Error selecting bid:", err);
+            toast.error("Failed to select captain. Please try again.");
         }
     };
 
@@ -383,6 +581,7 @@ const RiderDashboard: React.FC = () => {
                                 pickup={[pickupCoords.lat, pickupCoords.lng]}
                                 dropoff={[dropoffCoords.lat, dropoffCoords.lng]}
                                 path={[]}
+                                nearbyCaptains={nearbyCaptains.map(c => [c.lastLat, c.lastLng] as [number, number])}
                             />
                         ) : (
                             <div className="h-full w-full bg-zinc-100 flex items-center justify-center">
@@ -507,7 +706,7 @@ const RiderDashboard: React.FC = () => {
                     {savedAddresses && (savedAddresses.homeAddress || savedAddresses.workAddress) && !dropoffCoords && (
                         <div className="pt-2">
                             <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Quick destinations</p>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                 {savedAddresses.homeAddress && savedAddresses.homeAddressLat && savedAddresses.homeAddressLng && (
                                     <button
                                         onClick={() => {
@@ -517,7 +716,7 @@ const RiderDashboard: React.FC = () => {
                                                 lng: savedAddresses.homeAddressLng!
                                             });
                                         }}
-                                        className="flex-1 flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
+                                        className="min-w-35 sm:min-w-40 shrink-0 snap-start flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
                                     >
                                         <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
                                             <Home size={14} className="sm:w-4 sm:h-4 text-blue-600" />
@@ -537,7 +736,7 @@ const RiderDashboard: React.FC = () => {
                                                 lng: savedAddresses.workAddressLng!
                                             });
                                         }}
-                                        className="flex-1 flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
+                                        className="min-w-35 sm:min-w-40 shrink-0 snap-start flex items-center gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-zinc-50 hover:bg-zinc-100 rounded-xl transition-colors"
                                     >
                                         <div className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
                                             <Briefcase size={14} className="sm:w-4 sm:h-4 text-purple-600" />
@@ -578,6 +777,55 @@ const RiderDashboard: React.FC = () => {
                                     eta={type === 'BIKE' ? '2 min' : type === 'AUTO' ? '3 min' : '4 min'}
                                 />
                             ))}
+                        </div>
+
+                        {/* Bidding Mode Toggle */}
+                        <div className="mt-4 p-3 sm:p-4 border-2 border-zinc-100 rounded-xl">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Gavel size={16} className="text-amber-600" />
+                                    <div>
+                                        <p className="text-sm font-semibold text-zinc-900">Negotiate fare</p>
+                                        <p className="text-[10px] sm:text-xs text-zinc-500">Let captains bid on your ride</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setBiddingEnabled(!biddingEnabled);
+                                        if (!biddingEnabled) {
+                                            setOfferPrice(fares[vehicleType]);
+                                        } else {
+                                            setOfferPrice(null);
+                                        }
+                                    }}
+                                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                                        biddingEnabled ? 'bg-amber-500' : 'bg-zinc-300'
+                                    }`}
+                                >
+                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                                        biddingEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    }`} />
+                                </button>
+                            </div>
+                            {biddingEnabled && (
+                                <div className="mt-3 pt-3 border-t border-zinc-100">
+                                    <label className="text-xs text-zinc-500 font-medium">Your offer price</label>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                        <span className="text-lg font-bold text-zinc-900">₹</span>
+                                        <input
+                                            type="number"
+                                            value={offerPrice ?? ''}
+                                            onChange={(e) => setOfferPrice(Number(e.target.value))}
+                                            className="flex-1 px-3 py-2 border border-zinc-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            placeholder={`Suggested: ₹${fares[vehicleType]}`}
+                                            min={Math.round(fares[vehicleType] * 0.5)}
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-zinc-400 mt-1">
+                                        Suggested: ₹{fares[vehicleType]} &middot; Min: ₹{Math.round(fares[vehicleType] * 0.5)}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Request Button */}
@@ -640,6 +888,57 @@ const RiderDashboard: React.FC = () => {
                                 Cancel Request
                             </button>
                         )}
+
+                        {/* Bids Panel - shown when bidding mode is active and bids arrive */}
+                        {loading && biddingEnabled && bids.length > 0 && (
+                            <div className="mt-4">
+                                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                                    Captain Offers ({bids.length})
+                                </h4>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {bids.map((bid) => (
+                                        <div
+                                            key={bid.id}
+                                            className="p-3 bg-white border-2 border-zinc-100 rounded-xl hover:border-amber-300 transition-colors"
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-9 h-9 bg-zinc-100 rounded-lg flex items-center justify-center">
+                                                        <User size={16} className="text-zinc-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold">{bid.captain.user.fullName}</p>
+                                                        <div className="flex items-center gap-1 text-xs text-zinc-500">
+                                                            <Star size={10} className="fill-yellow-400 text-yellow-400" />
+                                                            <span>{bid.captain.rating.toFixed(1)}</span>
+                                                            <span className="text-zinc-300">·</span>
+                                                            <span>{bid.captain.totalRides} trips</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-lg font-bold text-zinc-900">₹{bid.offerAmount}</p>
+                                                    {bid.estimatedArrival && (
+                                                        <p className="text-[10px] text-zinc-500">{bid.estimatedArrival} min away</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-[10px] text-zinc-400">
+                                                    {bid.captain.vehicleColor} {bid.captain.vehicleModel} · {bid.captain.vehicleNumber}
+                                                </p>
+                                                <button
+                                                    onClick={() => handleSelectBid(bid.id)}
+                                                    className="px-4 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 transition-colors"
+                                                >
+                                                    Accept
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -665,6 +964,14 @@ const RiderDashboard: React.FC = () => {
                         pickup={[pickupCoords.lat, pickupCoords.lng]}
                         dropoff={[dropoffCoords.lat, dropoffCoords.lng]}
                         path={[]}
+                        nearbyCaptains={nearbyCaptains.map(c => [c.lastLat, c.lastLng] as [number, number])}
+                    />
+                ) : pickupCoords ? (
+                    <RideMap
+                        pickup={[pickupCoords.lat, pickupCoords.lng]}
+                        dropoff={[pickupCoords.lat, pickupCoords.lng]}
+                        path={[]}
+                        nearbyCaptains={nearbyCaptains.map(c => [c.lastLat, c.lastLng] as [number, number])}
                     />
                 ) : (
                     <div className="h-full w-full bg-zinc-100 flex items-center justify-center">

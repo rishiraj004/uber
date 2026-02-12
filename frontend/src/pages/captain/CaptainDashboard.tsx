@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History, FileText, AlertCircle, Menu, X } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, Power, Star, Clock, TrendingUp, Zap, ChevronRight, User, LogOut, History, FileText, AlertCircle, Menu, X, Gavel } from 'lucide-react';
 import { useSocket } from '../../context/socket-context';
 import toast from 'react-hot-toast';
 import { RideMap } from '../../components/RideMap';
@@ -20,6 +20,8 @@ interface RideRequest {
   dropoffLng?: number;
   distanceKm?: number;
   durationMinutes?: number;
+  isBiddingEnabled?: boolean;
+  baseOfferPrice?: number;
 }
 
 interface Analytics {
@@ -46,6 +48,8 @@ const CaptainDashboard = () => {
   const [requestTimer, setRequestTimer] = useState(30);
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
   const [showMobileStats, setShowMobileStats] = useState(false);
+  const [bidAmount, setBidAmount] = useState<number | null>(null);
+  const [biddingLoading, setBiddingLoading] = useState(false);
   
   const watchId = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -209,12 +213,28 @@ const CaptainDashboard = () => {
       }
     };
 
+    const handleBidSelected = (data: any) => {
+      toast.success('Your bid was accepted! Navigate to pickup.');
+      setCurrentRideRequest(null);
+      navigate('/captain-tracking', { state: { ride: data } });
+    };
+
+    const handleBidRejected = (data: any) => {
+      toast('Rider chose another captain', { icon: '😔' });
+      setCurrentRideRequest(null);
+      setBidAmount(null);
+    };
+
     socket.on('NEW_RIDE_REQUEST', handleNewRideRequest);
     socket.on('RIDE_CANCELLED', handleCancelRide);
+    socket.on('BID_SELECTED', handleBidSelected);
+    socket.on('BID_REJECTED', handleBidRejected);
 
     return () => { 
       socket.off("NEW_RIDE_REQUEST", handleNewRideRequest); 
       socket.off("RIDE_CANCELLED", handleCancelRide);
+      socket.off("BID_SELECTED", handleBidSelected);
+      socket.off("BID_REJECTED", handleBidRejected);
     };
   }, [socket, currentRideRequest]);
 
@@ -266,6 +286,26 @@ const CaptainDashboard = () => {
     } catch (error) {
       console.error("Error accepting ride", error);
       toast.error("Could not accept ride.");
+    }
+  };
+
+  const placeBid = async (rideId: number, overrideAmount?: number) => {
+    const amount = overrideAmount ?? bidAmount;
+    if (!amount || amount <= 0) {
+      toast.error('Please enter a valid bid amount');
+      return;
+    }
+    setBiddingLoading(true);
+    try {
+      await api.post(`/bids/${rideId}`, { offerAmount: amount });
+      toast.success('Bid placed successfully!');
+      setCurrentRideRequest(null);
+      setBidAmount(null);
+    } catch (error: any) {
+      console.error("Error placing bid", error);
+      toast.error(error?.response?.data?.message || "Could not place bid.");
+    } finally {
+      setBiddingLoading(false);
     }
   };
 
@@ -645,6 +685,12 @@ const CaptainDashboard = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-3xl font-black text-zinc-900">₹{currentRideRequest.fare}</p>
+                        {currentRideRequest.isBiddingEnabled && currentRideRequest.baseOfferPrice && (
+                          <div className="flex items-center gap-1 justify-end mt-1">
+                            <Gavel size={12} className="text-amber-500" />
+                            <span className="text-xs font-medium text-amber-600">Offer: ₹{currentRideRequest.baseOfferPrice}</span>
+                          </div>
+                        )}
                         {currentRideRequest.distanceKm && (
                           <p className="text-sm text-zinc-500">{currentRideRequest.distanceKm.toFixed(1)} km</p>
                         )}
@@ -686,21 +732,77 @@ const CaptainDashboard = () => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-3">
-                      <button 
-                        onClick={ignoreRide}
-                        className="flex-1 py-3.5 border-2 border-zinc-200 rounded-xl font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
-                      >
-                        Ignore
-                      </button>
-                      <button 
-                        onClick={() => acceptRide(currentRideRequest.rideId)}
-                        className="flex-2 py-3.5 bg-zinc-900 text-white rounded-xl font-semibold hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
-                      >
-                        Accept Ride
-                        <ChevronRight size={18} />
-                      </button>
-                    </div>
+                    {currentRideRequest.isBiddingEnabled ? (
+                      <div className="space-y-3">
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Gavel size={14} className="text-amber-600" />
+                            <span className="text-xs font-semibold text-amber-800">Negotiable Ride</span>
+                          </div>
+                          <p className="text-xs text-amber-700">
+                            Rider's offer: ₹{currentRideRequest.baseOfferPrice || currentRideRequest.fare}. You can accept or counter-offer.
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-500 font-medium">Your price (₹)</label>
+                          <input
+                            type="number"
+                            value={bidAmount ?? ''}
+                            onChange={(e) => setBidAmount(Number(e.target.value))}
+                            placeholder={`${currentRideRequest.baseOfferPrice || currentRideRequest.fare}`}
+                            className="w-full mt-1 px-3 py-2.5 border border-zinc-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                            min={1}
+                          />
+                        </div>
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={ignoreRide}
+                            className="flex-1 py-3.5 border-2 border-zinc-200 rounded-xl font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
+                          >
+                            Ignore
+                          </button>
+                          <button 
+                            onClick={() => {
+                              const riderPrice = currentRideRequest.baseOfferPrice || currentRideRequest.fare;
+                              placeBid(currentRideRequest.rideId, riderPrice);
+                            }}
+                            className="flex-1 py-3.5 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors text-sm"
+                          >
+                            Accept ₹{currentRideRequest.baseOfferPrice || currentRideRequest.fare}
+                          </button>
+                          <button 
+                            onClick={() => placeBid(currentRideRequest.rideId)}
+                            disabled={biddingLoading || !bidAmount}
+                            className="flex-1 py-3.5 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors flex items-center justify-center gap-1 text-sm disabled:opacity-50"
+                          >
+                            {biddingLoading ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                Counter
+                                <ChevronRight size={16} />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={ignoreRide}
+                          className="flex-1 py-3.5 border-2 border-zinc-200 rounded-xl font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
+                        >
+                          Ignore
+                        </button>
+                        <button 
+                          onClick={() => acceptRide(currentRideRequest.rideId)}
+                          className="flex-2 py-3.5 bg-zinc-900 text-white rounded-xl font-semibold hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+                        >
+                          Accept Ride
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>

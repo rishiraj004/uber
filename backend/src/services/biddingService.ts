@@ -408,6 +408,23 @@ export const selectBid = async (rideId: number, bidId: number, riderId: number):
         fare: result.selectedBid.offerAmount
     });
 
+    // Notify rider that ride is accepted (so frontend navigates to tracking)
+    sendNotification(riderId, 'RIDE_ACCEPTED', {
+        id: result.updatedRide.id,
+        status: result.updatedRide.status,
+        pickupAddress: result.updatedRide.pickupAddress,
+        pickupLat: result.updatedRide.pickupLat,
+        pickupLng: result.updatedRide.pickupLng,
+        dropoffAddress: result.updatedRide.dropoffAddress,
+        dropoffLat: result.updatedRide.dropoffLat,
+        dropoffLng: result.updatedRide.dropoffLng,
+        fare: result.selectedBid.offerAmount,
+        otp: result.updatedRide.otp,
+        captain: result.updatedRide.captain,
+        isBiddingEnabled: true,
+        finalAgreedPrice: result.selectedBid.offerAmount
+    });
+
     // Notify other captains that their bids were rejected
     const rejectedBids = await prisma.rideBid.findMany({
         where: { rideId, status: 'REJECTED' },

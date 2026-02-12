@@ -54,11 +54,34 @@ const captainIcon = L.divIcon({
     iconAnchor: [16, 16]
 });
 
+const nearbyCaptainIcon = L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+        width: 28px; 
+        height: 28px; 
+        background: #6366F1; 
+        border: 2px solid white; 
+        border-radius: 50%; 
+        box-shadow: 0 2px 8px rgba(99,102,241,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.85;
+    ">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+            <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
+        </svg>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+});
+
 interface RideMapProps {
     pickup: [number, number];
     dropoff: [number, number];
     currentLocation?: [number, number];
     path: [number, number][];
+    nearbyCaptains?: [number, number][];
 }
 
 // Component to fit bounds to show all markers
@@ -94,7 +117,7 @@ const RecenterMap = ({ coords }: { coords: [number, number] | undefined }) => {
     return null;
 };
 
-const RideMapComponent = ({ pickup, dropoff, currentLocation, path }: RideMapProps) => {
+const RideMapComponent = ({ pickup, dropoff, currentLocation, path, nearbyCaptains }: RideMapProps) => {
     // Guard: If pickup is not yet loaded, show loading state
     if (!pickup || pickup[0] === undefined || pickup[1] === undefined) {
         return (
@@ -157,6 +180,11 @@ const RideMapComponent = ({ pickup, dropoff, currentLocation, path }: RideMapPro
                     lineJoin="round"
                 />
             )}
+
+            {/* Nearby Captain Markers */}
+            {nearbyCaptains && nearbyCaptains.map((pos, index) => (
+                <Marker key={`nearby-captain-${index}`} position={pos} icon={nearbyCaptainIcon} />
+            ))}
         </MapContainer>
     );
 };
@@ -169,6 +197,7 @@ export const RideMap = memo(RideMapComponent, (prevProps, nextProps) => {
     const locationSame = prevProps.currentLocation?.[0] === nextProps.currentLocation?.[0] && 
                          prevProps.currentLocation?.[1] === nextProps.currentLocation?.[1];
     const pathSame = prevProps.path.length === nextProps.path.length;
+    const captainsSame = (prevProps.nearbyCaptains?.length ?? 0) === (nextProps.nearbyCaptains?.length ?? 0);
     
-    return pickupSame && dropoffSame && locationSame && pathSame;
+    return pickupSame && dropoffSame && locationSame && pathSame && captainsSame;
 });

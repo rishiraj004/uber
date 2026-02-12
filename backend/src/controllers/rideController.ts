@@ -331,7 +331,7 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
 
 export const createRide = async ( req: AuthRequest, res: Response) => {
     try {
-        const { vehicleType, vehicleClass, pickupCoords, destCoords, pickup, destination } = req.body;
+        const { vehicleType, vehicleClass, pickupCoords, destCoords, pickup, destination, isBiddingEnabled, baseOfferPrice } = req.body;
 
         if(!vehicleType || !pickupCoords || !destCoords || !pickup || !destination) {
             return res.status(400).json({ message: "All ride details are required." });
@@ -414,7 +414,9 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
                 routeGeometry: geometry ? JSON.stringify(geometry) : null,
                 otp: otp,
                 status: "PENDING",
-                paymentStatus: "PENDING"
+                paymentStatus: "PENDING",
+                isBiddingEnabled: isBiddingEnabled === true,
+                baseOfferPrice: isBiddingEnabled && baseOfferPrice ? parseFloat(Number(baseOfferPrice).toFixed(2)) : null
                 // paymentMode is set later by rider after ride is accepted
             }
         });
@@ -477,7 +479,7 @@ const startCaptainDispatch = async (
             // Check if ride is still pending
             const ride = await prisma.ride.findUnique({ 
                 where: { id: rideId },
-                select: { status: true, fare: true, pickupAddress: true, dropoffAddress: true, pickupLat: true, pickupLng: true, dropoffLat: true, dropoffLng: true, riderId: true }
+                select: { status: true, fare: true, pickupAddress: true, dropoffAddress: true, pickupLat: true, pickupLng: true, dropoffLat: true, dropoffLng: true, riderId: true, isBiddingEnabled: true, baseOfferPrice: true }
             });
             
             if (!ride || ride.status !== "PENDING") {
@@ -536,7 +538,9 @@ const startCaptainDispatch = async (
                             dropoffLat: ride.dropoffLat,
                             dropoffLng: ride.dropoffLng,
                             distanceKm: distanceKm,
-                            durationMinutes: durationMinutes
+                            durationMinutes: durationMinutes,
+                            isBiddingEnabled: ride.isBiddingEnabled || false,
+                            baseOfferPrice: ride.baseOfferPrice || null
                         }
                     );
                 }
