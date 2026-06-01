@@ -374,7 +374,8 @@ model Payment {
   rideId Int  @unique
 
   // Razorpay payment details
-  razorpayPaymentId  String @unique
+  razorpayPaymentId  String? @unique
+  razorpayOrderId    String @unique
   razorpayCustomerId String
 
   amount   Float // Amount in currency units
