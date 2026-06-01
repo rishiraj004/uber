@@ -1462,7 +1462,7 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             where: { rideId: Number(rideId) }
         });
 
-        if(!payementRecord || payementRecord.razorpayOrderId !== razorpay_order_id) {
+        if(!payementRecord) {
             return res.status(400).json({ message: "Invalid payment details" });
         }
 
