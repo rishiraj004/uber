@@ -196,10 +196,10 @@ export const getRideById = async (req: AuthRequest, res: Response) => {
 // Get active ride details for a user (excludes COMPLETED/CANCELLED)
 export const getRideDetails = async ( req: AuthRequest, res: Response) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user?.userId;
         
         if(!userId) {
-            return res.status(400).json({ message: "User ID is required." });
+            return res.status(400).json({ message: "Unauthorized" });
         }
 
         const role = req.user?.role;
@@ -394,7 +394,7 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
             surgeMultiplier
         );
         
-        const otp = crypto.randomInt(1000, 9999).toString();
+        const otp = crypto.randomInt(1000, 10000).toString();
         
         const newRide = await prisma.ride.create({
             data: {
@@ -623,17 +623,20 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             }
         } catch (paymentError: any) {
             console.error("Payment authorization failed:", paymentError);
-            // Continue without payment if Razorpay is not configured
-            // In production, you might want to reject the ride here
+        }
+
+        const lockResult = await prisma.ride.updateMany({
+            where: { id: Number(rideId), status: "PENDING" },
+            data: { captainId: captainProfile.id, status: "ACCEPTED" }
+        });
+
+        if (lockResult.count === 0) {
+            return res.status(400).json({ message: "Ride is no longer available." });
         }
 
         const [updatedRide] = await prisma.$transaction([
-            prisma.ride.update({
+            prisma.ride.findUniqueOrThrow({
                 where: { id: Number(rideId) },
-                data: {
-                    captainId: captainProfile.id,
-                    status: "ACCEPTED"
-                },
                 select: {
                     id: true,
                     riderId: true,
@@ -787,7 +790,7 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             return res.status(400).json({ message: `Cannot start ride in ${ride.status} status.` });
         }
 
-        if(ride.otp !== otp) {
+        if(String(ride.otp) !== String(otp)) {
             return res.status(400).json({ message: "Invalid OTP." });
         }
 
@@ -1376,13 +1379,23 @@ export const confirmCashPayment = async (req: AuthRequest, res: Response) => {
         }
 
         // Update payment status
-        const updatedRide = await prisma.ride.update({
-            where: { id: Number(rideId) },
-            data: {
-                paymentStatus: "CAPTURED",
-                paymentCollectedAt: new Date()
-            }
-        });
+        const [updatedRide, updatedCaptain] = await prisma.$transaction([
+            prisma.ride.update({
+                where: { id: Number(rideId) },
+                data: {
+                    paymentStatus: "CAPTURED",
+                    paymentCollectedAt: new Date()
+                }
+            }),
+            prisma.captainProfile.update({
+                where: { id: captainProfile.id },
+                data: {
+                    walletBalance: { increment: Number(ride.fare) },
+                    totalEarnings: { increment: Number(ride.fare) }, 
+                    totalRides: { increment: 1 } 
+                }
+            })
+        ]);
 
         // Notify rider that payment is confirmed
         sendNotification(ride.riderId, "PAYMENT_CONFIRMED", {
@@ -1445,8 +1458,14 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ message: "Payment has already been confirmed" });
         }
 
-        // Verify Razorpay signature
-        const crypto = require('crypto');
+        const payementRecord = await prisma.payment.findFirst({
+            where: { rideId: Number(rideId) }
+        });
+
+        if(!payementRecord || payementRecord.razorpayOrderId !== razorpay_order_id) {
+            return res.status(400).json({ message: "Invalid payment details" });
+        }
+
         const body = razorpay_order_id + '|' + razorpay_payment_id;
         const expectedSignature = crypto
             .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
