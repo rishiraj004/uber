@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import prisma from "../config/prisma.js";
 import { sendNotification } from "../config/socket.js";
 

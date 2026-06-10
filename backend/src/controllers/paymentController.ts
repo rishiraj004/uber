@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import {
     getOrCreateRazorpayCustomer,
     createRazorpayOrder,
@@ -262,15 +262,15 @@ export const getWithdrawals = async (req: AuthRequest, res: Response) => {
 // Legacy exports for backward compatibility
 export const getSetupIntent = async (req: AuthRequest, res: Response) => {
     // Razorpay doesn't need setup intents - redirect to create order
-    res.status(200).json({ 
+    res.status(200).json({
         message: "Use /payment/order endpoint to create a payment order",
-        deprecated: true 
+        deprecated: true
     });
 };
 
 export const getUserPaymentMethods = async (req: AuthRequest, res: Response) => {
     // Razorpay saved cards require token-based approach
-    res.status(200).json({ 
+    res.status(200).json({
         paymentMethods: [],
         message: "Saved payment methods feature uses Razorpay tokens"
     });

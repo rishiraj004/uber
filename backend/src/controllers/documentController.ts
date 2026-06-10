@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import prisma from "../config/prisma.js";
 
 // Document types that captains can upload
@@ -25,7 +25,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
         }
 
         if (!VALID_DOCUMENT_TYPES.includes(documentType as DocumentType)) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 message: "Invalid document type",
                 validTypes: VALID_DOCUMENT_TYPES
             });
@@ -107,8 +107,8 @@ export const getMyDocuments = async (req: AuthRequest, res: Response) => {
 
         const captainProfile = await prisma.captainProfile.findUnique({
             where: { userId },
-            select: { 
-                id: true, 
+            select: {
+                id: true,
                 isVerified: true,
                 documents: {
                     select: {
@@ -250,7 +250,7 @@ export const getVerificationStatus = async (req: AuthRequest, res: Response) => 
             allRequiredVerified,
             pendingCount: pendingDocs.length,
             rejectedCount: rejectedDocs.length,
-            message: !captainProfile.isVerified 
+            message: !captainProfile.isVerified
                 ? "Complete document verification to start accepting rides"
                 : "Your account is verified. You can go online!"
         });

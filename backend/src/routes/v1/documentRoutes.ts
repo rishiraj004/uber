@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authenticate } from "../../middlewares/authMiddlewares.js";
 import { authorizeRole } from "../../middlewares/roleMiddlewares.js";
-import { 
-    uploadDocument, 
-    getMyDocuments, 
-    deleteDocument, 
-    getVerificationStatus 
+import {
+    uploadDocument,
+    getMyDocuments,
+    deleteDocument,
+    getVerificationStatus
 } from "../../controllers/documentController.js";
 import {
     verifyDocument,

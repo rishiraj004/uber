@@ -1,6 +1,6 @@
 import { Response } from "express";
 import prisma from "../config/prisma.js";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 
 export const submitReview = async (req: AuthRequest, res: Response) => {
     try {

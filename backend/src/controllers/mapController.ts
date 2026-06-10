@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import { getAddressSuggestions, getDistanceAndDuration, retrieveSearchBoxResult } from "../services/mapService.js";
 
 /**

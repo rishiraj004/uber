@@ -1,19 +1,19 @@
 import { authorizeRole } from "../../middlewares/roleMiddlewares.js";
-import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authenticate } from "../../middlewares/authMiddlewares.js";
 import { Router } from "express";
-import { 
-    calculateFare, 
-    getRideDetails, 
-    getRideById, 
-    createRide, 
-    acceptRide, 
-    arrivedAtPickup, 
-    startRide, 
-    completeRide, 
-    cancelRide, 
-    getRidePath, 
-    getRideHistory, 
-    getRideHistoryDetail, 
+import {
+    calculateFare,
+    getRideDetails,
+    getRideById,
+    createRide,
+    acceptRide,
+    arrivedAtPickup,
+    startRide,
+    completeRide,
+    cancelRide,
+    getRidePath,
+    getRideHistory,
+    getRideHistoryDetail,
     checkSurge,
     initiatePaymentCollection,
     confirmCashPayment,

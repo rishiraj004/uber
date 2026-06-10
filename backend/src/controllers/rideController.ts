@@ -1,6 +1,6 @@
 import { Response } from "express";
 import prisma from "../config/prisma.js";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import crypto from "crypto";
 import { findNearbyCaptains } from "../services/mapService.js";
 import { distanceBetweenPoints, calculateTotalPathDistance, calculateTotalTime } from "../utils/index.js";
@@ -11,23 +11,23 @@ import { calculateSurgeMultiplier, getSurgeInfo } from "../services/surgeService
 import { authorizePayment, capturePayment, cancelPayment, getOrCreateRazorpayCustomer } from "../services/paymentService.js";
 import { sendPushNotification } from "../services/pushNotificationService.js";
 
-export const calculateFare = async ( req: AuthRequest, res: Response) => {
+export const calculateFare = async (req: AuthRequest, res: Response) => {
     try {
         const { vehicleType, vehicleClass, pickupCoords, destCoords } = req.body;
-        if(!pickupCoords || !destCoords) {
+        if (!pickupCoords || !destCoords) {
             return res.status(400).json({ message: "Pickup and destination coordinates are required." });
         }
         const result = await getDistanceAndDuration(
             [pickupCoords.lat, pickupCoords.lng],
             [destCoords.lat, destCoords.lng]
         );
-        
+
         if (!result) {
             return res.status(400).json({ message: "Unable to calculate distance and duration." });
         }
-        
+
         const { distanceKm, durationMinutes } = result;
-        
+
         // Get surge multiplier based on pickup location
         const surgeMultiplier = await calculateSurgeMultiplier(pickupCoords.lat, pickupCoords.lng);
         const surgeInfo = await getSurgeInfo(pickupCoords.lat, pickupCoords.lng);
@@ -35,13 +35,13 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
         // If specific vehicle type requested, return single fare
         if (vehicleType) {
             const fare = calculateRideFare(
-                distanceKm, 
-                durationMinutes, 
+                distanceKm,
+                durationMinutes,
                 vehicleType as 'CAR' | 'BIKE' | 'AUTO',
                 (vehicleClass as VehicleClass) || 'ECONOMY',
                 surgeMultiplier
             );
-            return res.status(200).json({ 
+            return res.status(200).json({
                 estimatedCost: parseFloat(fare.toFixed(2)),
                 distanceKm: parseFloat(distanceKm.toFixed(2)),
                 durationMinutes: parseFloat(durationMinutes.toFixed(2)),
@@ -53,8 +53,8 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
 
         // Return all fare options with surge applied
         const fareOptions = calculateAllFareOptions(distanceKm, durationMinutes, surgeMultiplier);
-        
-        res.status(200).json({ 
+
+        res.status(200).json({
             fareOptions,
             distanceKm: parseFloat(distanceKm.toFixed(2)),
             durationMinutes: parseFloat(durationMinutes.toFixed(2)),
@@ -65,7 +65,7 @@ export const calculateFare = async ( req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error("Error calculating fare:", error);
         res.status(500).json({ message: "Internal server error" });
-    }   
+    }
 };
 
 // Get a specific ride by ID (for Receipt/Review pages)
@@ -194,21 +194,21 @@ export const getRideById = async (req: AuthRequest, res: Response) => {
 };
 
 // Get active ride details for a user (excludes COMPLETED/CANCELLED)
-export const getRideDetails = async ( req: AuthRequest, res: Response) => {
+export const getRideDetails = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
-        
-        if(!userId) {
+
+        if (!userId) {
             return res.status(400).json({ message: "Unauthorized" });
         }
 
         const role = req.user?.role;
         let ride;
-        if(role === "RIDER") {
+        if (role === "RIDER") {
             ride = await prisma.ride.findFirst({
                 where: { riderId: Number(userId), status: { in: ['PENDING', 'ACCEPTED', 'ARRIVED', 'ONGOING'] } },
                 select: {
-                    id: true, 
+                    id: true,
                     status: true,
                     pickupAddress: true,
                     pickupLat: true,
@@ -266,13 +266,13 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                     vehicleType: ride.captain.vehicleType
                 };
             }
-        } else if(role === "CAPTAIN") {
+        } else if (role === "CAPTAIN") {
             // For captains, we need to find the captain profile first
             const captainProfile = await prisma.captainProfile.findUnique({
                 where: { userId: Number(userId) },
                 select: { id: true }
             });
-            
+
             if (captainProfile) {
                 const rideData = await prisma.ride.findFirst({
                     where: { captainId: captainProfile.id, status: { in: ['ACCEPTED', 'ARRIVED', 'ONGOING'] } },
@@ -301,7 +301,7 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
                     },
                     orderBy: { createdAt: 'desc' }
                 });
-                
+
                 // Flatten rider data for response
                 if (rideData) {
                     ride = {
@@ -326,14 +326,14 @@ export const getRideDetails = async ( req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error("Error fetching ride details:", error);
         res.status(500).json({ message: "Internal server error" });
-    }   
+    }
 };
 
-export const createRide = async ( req: AuthRequest, res: Response) => {
+export const createRide = async (req: AuthRequest, res: Response) => {
     try {
         const { vehicleType, vehicleClass, pickupCoords, destCoords, pickup, destination, isBiddingEnabled, baseOfferPrice } = req.body;
 
-        if(!vehicleType || !pickupCoords || !destCoords || !pickup || !destination) {
+        if (!vehicleType || !pickupCoords || !destCoords || !pickup || !destination) {
             return res.status(400).json({ message: "All ride details are required." });
         }
 
@@ -349,14 +349,14 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         });
 
         if (existingActiveRide) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 message: `You already have an active ride (ID: ${existingActiveRide.id}, Status: ${existingActiveRide.status}). Please complete or cancel it before booking a new ride.`,
                 existingRideId: existingActiveRide.id
             });
         }
-        
+
         // Get rider info including rating and Stripe customer ID
-        const riderInfo = await prisma.user.findUnique({ 
+        const riderInfo = await prisma.user.findUnique({
             where: { id: riderId! },
             include: {
                 riderProfile: {
@@ -374,28 +374,28 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
             [pickupCoords.lat, pickupCoords.lng],
             [destCoords.lat, destCoords.lng]
         );
-        
+
         if (!routeData) {
             return res.status(400).json({ message: "Unable to calculate route. Please try again." });
         }
 
         const { distanceKm, durationMinutes, geometry } = routeData;
-        
+
         // Calculate surge multiplier
         const surgeMultiplier = await calculateSurgeMultiplier(pickupCoords.lat, pickupCoords.lng);
-        
+
         // Calculate fare with surge and vehicle class
         const selectedVehicleClass = (vehicleClass as VehicleClass) || 'ECONOMY';
         const fare = calculateRideFare(
-            distanceKm, 
-            durationMinutes, 
+            distanceKm,
+            durationMinutes,
             vehicleType as 'CAR' | 'BIKE' | 'AUTO',
             selectedVehicleClass,
             surgeMultiplier
         );
-        
+
         const otp = crypto.randomInt(1000, 10000).toString();
-        
+
         const newRide = await prisma.ride.create({
             data: {
                 riderId: riderId!,
@@ -424,7 +424,7 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
         // Start dynamic captain dispatching with radius expansion
         startCaptainDispatch(newRide.id, pickupCoords.lat, pickupCoords.lng, riderName, riderRating, distanceKm, durationMinutes, selectedVehicleClass);
 
-        res.status(201).json({ 
+        res.status(201).json({
             message: "Ride created successfully",
             ride: {
                 ...newRide,
@@ -442,8 +442,8 @@ export const createRide = async ( req: AuthRequest, res: Response) => {
 const activeDispatchIntervals = new Map<number, NodeJS.Timeout>();
 
 const startCaptainDispatch = async (
-    rideId: number, 
-    pickupLat: number, 
+    rideId: number,
+    pickupLat: number,
     pickupLng: number,
     riderName: string,
     riderRating: number,
@@ -468,7 +468,7 @@ const startCaptainDispatch = async (
             captainsNotified,
             elapsedSeconds,
             maxSeconds: maxDispatchTime / 1000,
-            message: captainsNotified > 0 
+            message: captainsNotified > 0
                 ? `Searching... ${captainsNotified} captain(s) notified within ${currentRadius}km`
                 : `Expanding search to ${currentRadius}km radius...`
         });
@@ -477,11 +477,11 @@ const startCaptainDispatch = async (
     const dispatchToCaptains = async () => {
         try {
             // Check if ride is still pending
-            const ride = await prisma.ride.findUnique({ 
+            const ride = await prisma.ride.findUnique({
                 where: { id: rideId },
                 select: { status: true, fare: true, pickupAddress: true, dropoffAddress: true, pickupLat: true, pickupLng: true, dropoffLat: true, dropoffLng: true, riderId: true, isBiddingEnabled: true, baseOfferPrice: true }
             });
-            
+
             if (!ride || ride.status !== "PENDING") {
                 // Ride is no longer pending, stop dispatching
                 clearInterval(activeDispatchIntervals.get(rideId));
@@ -496,7 +496,7 @@ const startCaptainDispatch = async (
                     where: { id: rideId },
                     data: { status: "CANCELLED" }
                 });
-                
+
                 sendNotification(ride.riderId, "RIDE_EXPIRED", {
                     rideId: rideId,
                     message: "No captains available at the moment. Please try again."
@@ -514,19 +514,19 @@ const startCaptainDispatch = async (
             // Send notifications to new captains only
             for (const captain of nearbyCaptains) {
                 if (notifiedCaptains.has(captain.id)) continue;
-                
+
                 const captainData = await prisma.captainProfile.findUnique({
                     where: { id: captain.id },
                     select: { userId: true, vehicleType: true }
                 });
-                
+
                 if (captainData) {
                     notifiedCaptains.add(captain.id);
                     console.log(`Sending NEW_RIDE_REQUEST to captain userId ${captainData.userId} (radius: ${currentRadius}km)`);
                     sendNotification(
-                        captainData.userId, 
+                        captainData.userId,
                         "NEW_RIDE_REQUEST",
-                        { 
+                        {
                             rideId: rideId,
                             pickupAddress: ride.pickupAddress,
                             dropoffAddress: ride.dropoffAddress,
@@ -567,16 +567,16 @@ const startCaptainDispatch = async (
     activeDispatchIntervals.set(rideId, intervalId);
 };
 
-export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
+export const acceptRide = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         const { rideId } = req.body;
 
-        if(!userId) {
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        if(!rideId) {
+        if (!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
         }
 
@@ -586,32 +586,32 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             select: { id: true, isVerified: true, licenseExpiry: true, rcExpiry: true }
         });
 
-        if(!captainProfile) {
+        if (!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
         // Security: Verify captain is verified and documents are not expired
-        if(!captainProfile.isVerified) {
+        if (!captainProfile.isVerified) {
             return res.status(403).json({ message: "Your account is not verified. Please complete document verification." });
         }
 
         const now = new Date();
-        if(captainProfile.licenseExpiry && captainProfile.licenseExpiry < now) {
+        if (captainProfile.licenseExpiry && captainProfile.licenseExpiry < now) {
             return res.status(403).json({ message: "Your driving license has expired. Please update your documents." });
         }
-        if(captainProfile.rcExpiry && captainProfile.rcExpiry < now) {
+        if (captainProfile.rcExpiry && captainProfile.rcExpiry < now) {
             return res.status(403).json({ message: "Your vehicle registration has expired. Please update your documents." });
         }
 
-        const ride = await prisma.ride.findUnique({ 
+        const ride = await prisma.ride.findUnique({
             where: { id: Number(rideId) },
             include: { rider: true }
         });
-        if(!ride) {
+        if (!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
 
-        if(ride.status !== "PENDING") {
+        if (ride.status !== "PENDING") {
             return res.status(400).json({ message: "Ride is no longer available." });
         }
 
@@ -665,7 +665,7 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             })
         ]);
 
-        sendNotification(updatedRide.riderId , "RIDE_ACCEPTED", {
+        sendNotification(updatedRide.riderId, "RIDE_ACCEPTED", {
             rideId: updatedRide.id,
             captainName: updatedRide.captain?.user.fullName,
             status: updatedRide.status,
@@ -679,7 +679,7 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
             message: "Your ride has been accepted!"
         });
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: "Ride accepted successfully",
             ride: {
                 rideId: updatedRide.id,
@@ -696,35 +696,35 @@ export const acceptRide =  async ( req : AuthRequest , res : Response ) => {
     }
 };
 
-export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
+export const arrivedAtPickup = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         const { rideId } = req.body;
-        if(!userId) {
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        if(!rideId) {
+        if (!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
         }
-        
+
         // Get the captain profile for this user
         const captainProfile = await prisma.captainProfile.findUnique({
             where: { userId: userId },
             select: { id: true }
         });
 
-        if(!captainProfile) {
+        if (!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
-        if(!ride) {
+        if (!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
-        if(ride.captainId !== captainProfile.id) {
+        if (ride.captainId !== captainProfile.id) {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
-        if(ride.status !== "ACCEPTED") {
+        if (ride.status !== "ACCEPTED") {
             return res.status(400).json({ message: `Cannot mark arrival for ride in ${ride.status} status.` });
         }
         const updatedRide = await prisma.ride.update({
@@ -733,7 +733,7 @@ export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
         });
 
         // Send socket notification
-        sendNotification(updatedRide.riderId , "CAPTAIN_ARRIVED", {
+        sendNotification(updatedRide.riderId, "CAPTAIN_ARRIVED", {
             rideId: updatedRide.id,
             status: updatedRide.status,
             message: "Your captain has arrived at the pickup location."
@@ -746,23 +746,23 @@ export const arrivedAtPickup = async ( req : AuthRequest , res : Response ) => {
 
         res.status(200).json({
             message: "Marked arrival at pickup successfully",
-            ride: updatedRide 
+            ride: updatedRide
         });
     } catch (error) {
         console.error("Error marking arrival at pickup:", error);
         res.status(500).json({ message: "Internal server error" });
-    }   
+    }
 };
 
-export const startRide = async ( req : AuthRequest , res : Response ) => {
+export const startRide = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         const { rideId, otp } = req.body;
-        if(!userId) {
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        if(!rideId || !otp) {
+        if (!rideId || !otp) {
             return res.status(400).json({ message: "Ride ID and OTP are required." });
         }
 
@@ -772,25 +772,25 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             select: { id: true }
         });
 
-        if(!captainProfile) {
+        if (!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
 
-        if(!ride) {
+        if (!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
 
-        if(ride.captainId !== captainProfile.id) {
+        if (ride.captainId !== captainProfile.id) {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
 
-        if(ride.status !== "ARRIVED") {
+        if (ride.status !== "ARRIVED") {
             return res.status(400).json({ message: `Cannot start ride in ${ride.status} status.` });
         }
 
-        if(String(ride.otp) !== String(otp)) {
+        if (String(ride.otp) !== String(otp)) {
             return res.status(400).json({ message: "Invalid OTP." });
         }
 
@@ -800,7 +800,7 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
         });
 
         // Send socket notification
-        sendNotification(ongoingRide.riderId , "RIDE_STARTED", {
+        sendNotification(ongoingRide.riderId, "RIDE_STARTED", {
             rideId: ongoingRide.id,
             status: ongoingRide.status
         });
@@ -810,9 +810,9 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
             rideId: ongoingRide.id
         });
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: "Ride started successfully",
-            ride: ongoingRide 
+            ride: ongoingRide
         });
     } catch (error) {
         console.error("Error starting ride:", error);
@@ -820,16 +820,16 @@ export const startRide = async ( req : AuthRequest , res : Response ) => {
     }
 };
 
-export const completeRide = async ( req : AuthRequest , res : Response ) => {
+export const completeRide = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         const { rideId } = req.body;
 
-        if(!userId) {
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        if(!rideId) {
+        if (!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
         }
 
@@ -839,27 +839,27 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             select: { id: true }
         });
 
-        if(!captainProfile) {
+        if (!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
 
-        if(!ride) {
+        if (!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
 
-        if(ride.captainId !== captainProfile.id) {
+        if (ride.captainId !== captainProfile.id) {
             return res.status(403).json({ message: "You are not assigned to this ride." });
         }
 
-        if(ride.status !== "ONGOING") {
+        if (ride.status !== "ONGOING") {
             return res.status(400).json({ message: `Cannot complete ride in ${ride.status} status.` });
         }
 
         // PAYMENT VERIFICATION: Ride cannot be completed until payment is collected
-        if(ride.paymentStatus !== "CAPTURED") {
-            return res.status(400).json({ 
+        if (ride.paymentStatus !== "CAPTURED") {
+            return res.status(400).json({
                 message: "Payment has not been collected. Please collect payment before completing the ride.",
                 paymentMode: ride.paymentMode,
                 paymentStatus: ride.paymentStatus
@@ -868,7 +868,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
 
         // Use the upfront fare stored when ride was created
         const finalFare = ride.fare;
-        
+
         // Calculate actual distance/duration for analytics
         const logs = await prisma.rideLocationLog.findMany({
             where: { rideId: Number(rideId) },
@@ -877,7 +877,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
         const actualDistance = calculateTotalPathDistance(logs.map(log => ({ lat: log.latitude, lng: log.longitude })));
         const actualDurationMinutes = calculateTotalTime(logs);
 
-        const [completedRide ] = await prisma.$transaction([
+        const [completedRide] = await prisma.$transaction([
             prisma.ride.update({
                 where: { id: Number(rideId) },
                 data: { status: "COMPLETED", completedAt: new Date() },
@@ -889,7 +889,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
         ]);
 
         // Send socket notification
-        sendNotification(completedRide.riderId , "RIDE_COMPLETED", {
+        sendNotification(completedRide.riderId, "RIDE_COMPLETED", {
             rideId: completedRide.id,
             status: completedRide.status,
             fare: finalFare,
@@ -907,7 +907,7 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
             fare: finalFare
         });
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: "Ride completed successfully",
             ride: completedRide,
             estimatedDistance: ride.estimatedDistance,
@@ -921,19 +921,19 @@ export const completeRide = async ( req : AuthRequest , res : Response ) => {
     }
 };
 
-export const cancelRide = async ( req : AuthRequest , res : Response ) => {
+export const cancelRide = async (req: AuthRequest, res: Response) => {
     try {
         console.log("Cancel Ride Request Body:", req.body);
         const userId = req.user?.userId;
         const { rideId } = req.body;
-        if(!userId) {
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        if(!rideId) {
+        if (!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
         }
         const ride = await prisma.ride.findUnique({ where: { id: Number(rideId) } });
-        if(!ride) {
+        if (!ride) {
             return res.status(404).json({ message: "Ride not found" });
         }
 
@@ -951,10 +951,10 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
             isCaptain = captainProfile ? ride.captainId === captainProfile.id : false;
         }
 
-        if(!isRider && !isCaptain) {
+        if (!isRider && !isCaptain) {
             return res.status(403).json({ message: "You are not associated with this ride." });
         }
-        if(ride.status === "COMPLETED" || ride.status === "CANCELLED") {
+        if (ride.status === "COMPLETED" || ride.status === "CANCELLED") {
             return res.status(400).json({ message: `Cannot cancel ride in ${ride.status} status.` });
         }
 
@@ -1007,9 +1007,9 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
             });
         });
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: "Ride cancelled successfully",
-            ride: cancelledRide 
+            ride: cancelledRide
         });
     } catch (error) {
         console.error("Error cancelling ride:", error);
@@ -1017,10 +1017,10 @@ export const cancelRide = async ( req : AuthRequest , res : Response ) => {
     }
 };
 
-export const getRidePath = async ( req : AuthRequest , res : Response ) => {
+export const getRidePath = async (req: AuthRequest, res: Response) => {
     try {
         const { rideId } = req.params;
-        if(!rideId) {
+        if (!rideId) {
             return res.status(400).json({ message: "Ride ID is required." });
         }
         const logs = await prisma.rideLocationLog.findMany({
@@ -1039,7 +1039,7 @@ export const getRidePath = async ( req : AuthRequest , res : Response ) => {
         });
     } catch (error) {
         console.error("Error fetching ride path:", error);
-        res.status(500).json({ message: "Internal server error" }); 
+        res.status(500).json({ message: "Internal server error" });
 
     };
 };
@@ -1062,7 +1062,7 @@ export const getRideHistory = async (req: AuthRequest, res: Response) => {
         if (role === "RIDER") {
             [rides, total] = await Promise.all([
                 prisma.ride.findMany({
-                    where: { 
+                    where: {
                         riderId: userId,
                         status: { in: ['COMPLETED', 'CANCELLED'] }
                     },
@@ -1117,7 +1117,7 @@ export const getRideHistory = async (req: AuthRequest, res: Response) => {
 
             [rides, total] = await Promise.all([
                 prisma.ride.findMany({
-                    where: { 
+                    where: {
                         captainId: captainProfile.id,
                         status: { in: ['COMPLETED', 'CANCELLED'] }
                     },
@@ -1190,8 +1190,8 @@ export const getRideHistoryDetail = async (req: AuthRequest, res: Response) => {
             where: { id: Number(rideId) },
             include: {
                 rider: { select: { fullName: true, riderProfile: { select: { rating: true } } } },
-                captain: { 
-                    select: { 
+                captain: {
+                    select: {
                         user: { select: { fullName: true } },
                         rating: true,
                         vehicleNumber: true,
@@ -1286,7 +1286,7 @@ export const initiatePaymentCollection = async (req: AuthRequest, res: Response)
             return res.status(404).json({ message: "Captain profile not found" });
         }
 
-        const ride = await prisma.ride.findUnique({ 
+        const ride = await prisma.ride.findUnique({
             where: { id: Number(rideId) },
             include: { rider: { select: { fullName: true } } }
         });
@@ -1312,11 +1312,11 @@ export const initiatePaymentCollection = async (req: AuthRequest, res: Response)
             rideId: ride.id,
             fare: ride.fare,
             paymentMode: ride.paymentMode,
-            message: ride.paymentMode === 'CASH' 
+            message: ride.paymentMode === 'CASH'
                 ? `Please pay ₹${ride.fare} in cash to your captain`
                 : ride.paymentMode === 'UPI'
-                ? `Please pay ₹${ride.fare} via UPI`
-                : `Please complete payment of ₹${ride.fare} in the app`
+                    ? `Please pay ₹${ride.fare} via UPI`
+                    : `Please complete payment of ₹${ride.fare} in the app`
         });
 
         res.status(200).json({
@@ -1391,8 +1391,8 @@ export const confirmCashPayment = async (req: AuthRequest, res: Response) => {
                 where: { id: captainProfile.id },
                 data: {
                     walletBalance: { increment: Number(ride.fare) },
-                    totalEarnings: { increment: Number(ride.fare) }, 
-                    totalRides: { increment: 1 } 
+                    totalEarnings: { increment: Number(ride.fare) },
+                    totalRides: { increment: 1 }
                 }
             })
         ]);
@@ -1437,7 +1437,7 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ message: "Missing Razorpay payment details" });
         }
 
-        const ride = await prisma.ride.findUnique({ 
+        const ride = await prisma.ride.findUnique({
             where: { id: Number(rideId) },
             include: { captain: { select: { userId: true } } }
         });
@@ -1462,7 +1462,7 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             where: { rideId: Number(rideId) }
         });
 
-        if(!payementRecord) {
+        if (!payementRecord) {
             return res.status(400).json({ message: "Invalid payment details" });
         }
 
@@ -1471,7 +1471,7 @@ export const confirmInAppPayment = async (req: AuthRequest, res: Response) => {
             .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
             .update(body)
             .digest('hex');
-        
+
         if (expectedSignature !== razorpay_signature) {
             return res.status(400).json({ message: "Invalid payment signature" });
         }
@@ -1592,8 +1592,8 @@ export const updatePaymentMethod = async (req: AuthRequest, res: Response) => {
         // Validate payment method
         const validPaymentMethods = ['CASH', 'UPI', 'IN_APP'];
         if (!paymentMethod || !validPaymentMethods.includes(paymentMethod)) {
-            return res.status(400).json({ 
-                message: "Invalid payment method. Must be CASH, UPI, or IN_APP" 
+            return res.status(400).json({
+                message: "Invalid payment method. Must be CASH, UPI, or IN_APP"
             });
         }
 
@@ -1624,8 +1624,8 @@ export const updatePaymentMethod = async (req: AuthRequest, res: Response) => {
         // Can only update payment method for ACCEPTED, ARRIVED, or ONGOING rides
         const allowedStatuses = ['ACCEPTED', 'ARRIVED', 'ONGOING'];
         if (!allowedStatuses.includes(ride.status)) {
-            return res.status(400).json({ 
-                message: `Cannot update payment method for ride in ${ride.status} status` 
+            return res.status(400).json({
+                message: `Cannot update payment method for ride in ${ride.status} status`
             });
         }
 
@@ -1646,11 +1646,11 @@ export const updatePaymentMethod = async (req: AuthRequest, res: Response) => {
                 rideId: ride.id,
                 paymentMethod: paymentMethod,
                 fare: ride.fare,
-                message: paymentMethod === 'CASH' 
+                message: paymentMethod === 'CASH'
                     ? `Rider will pay ₹${ride.fare} in cash`
                     : paymentMethod === 'UPI'
-                    ? `Rider will pay ₹${ride.fare} via UPI`
-                    : `Rider will pay ₹${ride.fare} online through the app`
+                        ? `Rider will pay ₹${ride.fare} via UPI`
+                        : `Rider will pay ₹${ride.fare} online through the app`
             });
         }
 

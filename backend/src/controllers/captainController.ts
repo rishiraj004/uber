@@ -1,16 +1,16 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import prisma from "../config/prisma.js";
 import { findNearbyCaptains } from "../services/mapService.js";
 import redis from "../config/redis.js";
 
-export const toggleAvailability = async ( req : AuthRequest , res : Response ) => {
+export const toggleAvailability = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        const captainProfile = await prisma.captainProfile.findUnique({ 
+        const captainProfile = await prisma.captainProfile.findUnique({
             where: { userId: userId },
             select: { id: true, isOnline: true, isVerified: true }
         });
@@ -22,7 +22,7 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
 
         // Prevent unverified captains from going online
         if (goingOnline && !captainProfile.isVerified) {
-            return res.status(403).json({ 
+            return res.status(403).json({
                 message: "Cannot go online. Please complete document verification first.",
                 isVerified: false,
                 redirectTo: "/captain/documents"
@@ -31,9 +31,9 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
 
         const updatedCaptain = await prisma.captainProfile.update({
             where: { id: captainProfile.id },
-            data: { 
+            data: {
                 isOnline: goingOnline,
-                isAvailable: goingOnline ? true : false 
+                isAvailable: goingOnline ? true : false
             },
             select: { id: true, isOnline: true, user: { select: { fullName: true } } }
         });
@@ -78,16 +78,16 @@ export const toggleAvailability = async ( req : AuthRequest , res : Response ) =
     }
 };
 
-export const updateLocation = async ( req : AuthRequest , res : Response ) => {
+export const updateLocation = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         const { latitude, longitude } = req.body;
 
-        if(!userId) {
+        if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        if(latitude === undefined || longitude === undefined) {
+        if (latitude === undefined || longitude === undefined) {
             return res.status(400).json({ message: "Latitude and Longitude are required." });
         }
 
@@ -113,18 +113,18 @@ export const updateLocation = async ( req : AuthRequest , res : Response ) => {
     }
 };
 
-export const getNearbyCaptains = async ( req : AuthRequest , res : Response ) => {
+export const getNearbyCaptains = async (req: AuthRequest, res: Response) => {
     try {
-        const { latitude, longitude , radius = 5 } = req.query;
+        const { latitude, longitude, radius = 5 } = req.query;
 
-        if(latitude === undefined || longitude === undefined) {
+        if (latitude === undefined || longitude === undefined) {
             return res.status(400).json({
                 message: "Latitude and Longitude are required.",
                 location: {
                     latitude: latitude,
                     longitude: longitude
                 }
-            } );
+            });
         }
 
         const riderLat = parseFloat(latitude as string);
@@ -140,20 +140,20 @@ export const getNearbyCaptains = async ( req : AuthRequest , res : Response ) =>
     }
 };
 
-export const getCaptainStatus = async ( req : AuthRequest , res : Response ) => {
+export const getCaptainStatus = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
-        const captainProfile = await prisma.captainProfile.findUnique({ 
+        const captainProfile = await prisma.captainProfile.findUnique({
             where: { userId: userId },
             select: { isOnline: true, isAvailable: true }
         });
         if (!captainProfile) {
             return res.status(404).json({ message: "Captain profile not found" });
         }
-        res.status(200).json({ 
+        res.status(200).json({
             isOnline: captainProfile.isOnline,
             isAvailable: captainProfile.isAvailable
         });
@@ -162,14 +162,14 @@ export const getCaptainStatus = async ( req : AuthRequest , res : Response ) => 
     }
 };
 
-export const getAnalytics = async ( req : AuthRequest , res : Response ) => {
+export const getAnalytics = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        const captainProfile = await prisma.captainProfile.findUnique({ 
+        const captainProfile = await prisma.captainProfile.findUnique({
             where: { userId: userId },
             select: { id: true }
         });
@@ -223,7 +223,7 @@ export const getAnalytics = async ( req : AuthRequest , res : Response ) => {
             const shiftStart = new Date(shift.startTime);
             // If shift is still active (no endTime), use current time
             const shiftEnd = shift.endTime ? new Date(shift.endTime) : now;
-            
+
             // Calculate duration in minutes
             const durationMs = shiftEnd.getTime() - shiftStart.getTime();
             totalOnlineMinutes += durationMs / (1000 * 60);

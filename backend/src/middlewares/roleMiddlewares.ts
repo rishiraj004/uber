@@ -1,11 +1,11 @@
 import { Response, NextFunction } from "express";
-import { AuthRequest } from "./authMiddelwares.js";
+import { AuthRequest } from "./authMiddlewares.js";
 import jwt from "jsonwebtoken";
 import prisma from "../config/prisma.js";
 
 
-export const authorizeRole = ( requiredRole : 'RIDER' | 'CAPTAIN' | 'ADMIN') => {
-    return ( req : AuthRequest , res : Response , next : NextFunction ) => {
+export const authorizeRole = (requiredRole: 'RIDER' | 'CAPTAIN' | 'ADMIN') => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
         const userRole = req.user?.role;
         if (userRole !== requiredRole) {
             return res.status(403).json({ message: "Access denied. Insufficient permissions." });
@@ -14,7 +14,7 @@ export const authorizeRole = ( requiredRole : 'RIDER' | 'CAPTAIN' | 'ADMIN') => 
     }
 }
 
-export const authorizeAdmin = ( req : AuthRequest , res : Response , next : NextFunction ) => {
+export const authorizeAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
     const userRole = req.user?.role;
     if (userRole !== 'ADMIN') {
         return res.status(403).json({ message: "Access denied. Admin privileges required." });
@@ -23,7 +23,7 @@ export const authorizeAdmin = ( req : AuthRequest , res : Response , next : Next
 }
 
 // Middleware to attach captain profile to request
-export const attachCaptainProfile = async ( req : AuthRequest , res : Response , next : NextFunction ) => {
+export const attachCaptainProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         const userId = req.user?.userId;
         if (!userId) {

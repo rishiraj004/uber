@@ -2,12 +2,12 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import prisma from "../config/prisma.js";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import { userData } from "../services/getProfileService.js";
 
 export const signup = async (req: Request, res: Response) => {
     try {
-        const { email, password, fullName, role , phone, vehicleDetails } = req.body;
+        const { email, password, fullName, role, phone, vehicleDetails } = req.body;
 
         if (!email || !password || !fullName || !phone || !role || (role === "CAPTAIN" && !vehicleDetails)) {
             return res.status(400).json({ message: "Missing required fields." });
@@ -69,10 +69,10 @@ export const signup = async (req: Request, res: Response) => {
     }
 }
 
-export const login = async ( req : Request , res : Response ) => {
+export const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
-        if(!email || !password) {
+        if (!email || !password) {
             return res.status(400).json({ message: "Email and password are required." });
         }
         const user = await prisma.user.findUnique({ where: { email } });
@@ -103,7 +103,7 @@ export const login = async ( req : Request , res : Response ) => {
     }
 }
 
-export const getProfile = async ( req : AuthRequest , res : Response ) => {
+export const getProfile = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
 

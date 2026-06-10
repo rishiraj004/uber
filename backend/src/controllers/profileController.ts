@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middlewares/authMiddelwares.js";
+import { AuthRequest } from "../middlewares/authMiddlewares.js";
 import prisma from "../config/prisma.js";
 
 // Update rider's saved addresses (Home/Work)
@@ -21,13 +21,13 @@ export const updateRiderAddresses = async (req: AuthRequest, res: Response) => {
         }
 
         const updateData: any = {};
-        
+
         if (homeAddress !== undefined) {
             updateData.homeAddress = homeAddress;
             updateData.homeAddressLat = homeAddressLat;
             updateData.homeAddressLng = homeAddressLng;
         }
-        
+
         if (workAddress !== undefined) {
             updateData.workAddress = workAddress;
             updateData.workAddressLat = workAddressLat;

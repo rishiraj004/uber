@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/authMiddelwares.js";
+import { authenticate } from "../../middlewares/authMiddlewares.js";
 import { registerFcmToken, unregisterFcmToken } from "../../controllers/notificationController.js";
 
 const router = Router();
