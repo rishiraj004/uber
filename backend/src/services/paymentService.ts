@@ -102,7 +102,7 @@ export const createRazorpayOrder = async (
         await prisma.payment.update({
             where: { id: existingPayment.id },
             data: {
-                razorpayPaymentId: order.id,
+                razorpayOrderId: order.id,
                 razorpayCustomerId: customerId,
                 amount,
                 status: 'PENDING'
@@ -112,7 +112,7 @@ export const createRazorpayOrder = async (
         await prisma.payment.create({
             data: {
                 rideId,
-                razorpayPaymentId: order.id,
+                razorpayOrderId: order.id,
                 razorpayCustomerId: customerId,
                 amount,
                 currency: 'inr',
@@ -157,7 +157,7 @@ export const authorizePayment = async (rideId: number, amount: number, customerI
     });
 
     if (payment && (payment.status === 'AUTHORIZED' || payment.status === 'PENDING')) {
-        return payment.razorpayPaymentId;
+        return payment.razorpayOrderId;
     }
 
     // Create Razorpay order for this ride
@@ -179,7 +179,7 @@ export const authorizePayment = async (rideId: number, amount: number, customerI
         await prisma.payment.update({
             where: { id: payment.id },
             data: {
-                razorpayPaymentId: order.id,
+                razorpayOrderId: order.id,
                 status: 'PENDING',
                 authorizedAt: new Date()
             }
@@ -189,7 +189,7 @@ export const authorizePayment = async (rideId: number, amount: number, customerI
         await prisma.payment.create({
             data: {
                 rideId,
-                razorpayPaymentId: order.id,
+                razorpayOrderId: order.id,
                 razorpayCustomerId: customerId,
                 amount,
                 currency: 'inr',
@@ -294,9 +294,14 @@ export const capturePayment = async (rideId: number): Promise<void> => {
         return;
     }
 
+    if (!payment.razorpayPaymentId) {
+        console.log(`No Razorpay payment ID found for ride ${rideId}`);
+        return;
+    }
+
     try {
         // For Razorpay, verify the payment status
-        const razorpayPayment = await razorpay.payments.fetch(payment.razorpayPaymentId);
+        const razorpayPayment = await razorpay.payments.fetch(payment.razorpayPaymentId) as any;
         
         if (razorpayPayment.status === 'captured') {
             // Payment already captured (auto-capture enabled)
@@ -378,6 +383,7 @@ export const cancelPayment = async (rideId: number): Promise<void> => {
 
     try {
         if (payment.status === 'CAPTURED') {
+            if (!payment.razorpayPaymentId) return;
             // Create refund for captured payment
             await razorpay.payments.refund(payment.razorpayPaymentId, {
                 amount: Math.round(payment.amount * 100), // Full refund in paise
@@ -448,6 +454,10 @@ export const refundPayment = async (rideId: number, amount?: number): Promise<vo
 
     if (payment.status !== 'CAPTURED') {
         throw new Error('Can only refund captured payments');
+    }
+
+    if (!payment.razorpayPaymentId) {
+        throw new Error('No payment ID found to refund');
     }
 
     const refundAmount = amount || payment.amount;
